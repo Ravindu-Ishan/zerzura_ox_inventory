@@ -1,58 +1,54 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Inventory } from '../../typings';
-import WeightBar from '../utils/WeightBar';
+import React, { useEffect, useState } from 'react';
+import { Inventory, Slot } from '../../typings';
 import InventorySlot from './InventorySlot';
-import { getTotalWeight } from '../../helpers';
-import { useAppSelector } from '../../store';
 import { useIntersection } from '../../hooks/useIntersection';
 
 const PAGE_SIZE = 30;
 
-const InventoryGrid: React.FC<{ inventory: Inventory }> = ({ inventory }) => {
-  const weight = useMemo(
-    () => (inventory.maxWeight !== undefined ? Math.floor(getTotalWeight(inventory.items) * 1000) / 1000 : 0),
-    [inventory.maxWeight, inventory.items]
-  );
+/**
+ * A plain grid of slots.
+ *
+ * The header/capacity chrome that used to live here now belongs to the column
+ * that owns the grid (LeftInventory / RightInventory), because the reskin has
+ * one header per card rather than one per grid - the left column renders two
+ * grids (Pockets, Backpack) under a single shared header and capacity bar.
+ *
+ * `paged` keeps the stock incremental-render behaviour for long lists (a stash
+ * or trunk can be thousands of slots); short lists render in one go.
+ */
+const InventoryGrid: React.FC<{
+  items: Slot[];
+  inventory: Inventory;
+  paged?: boolean;
+  className?: string;
+}> = ({ items, inventory, paged = false, className }) => {
   const [page, setPage] = useState(0);
-  const containerRef = useRef(null);
   const { ref, entry } = useIntersection({ threshold: 0.5 });
-  const isBusy = useAppSelector((state) => state.inventory.isBusy);
 
   useEffect(() => {
-    if (entry && entry.isIntersecting) {
-      setPage((prev) => ++prev);
-    }
+    if (entry && entry.isIntersecting) setPage((prev) => prev + 1);
   }, [entry]);
+
+  // Reset paging when the underlying container changes, otherwise opening a
+  // small stash after a large one would render it fully expanded.
+  useEffect(() => setPage(0), [inventory.id, inventory.type]);
+
+  const limit = paged ? (page + 1) * PAGE_SIZE : items.length;
+  const visible = paged ? items.slice(0, limit) : items;
+
   return (
-    <>
-      <div className="inventory-grid-wrapper" style={{ pointerEvents: isBusy ? 'none' : 'auto' }}>
-        <div>
-          <div className="inventory-grid-header-wrapper">
-            <p>{inventory.label}</p>
-            {inventory.maxWeight && (
-              <p>
-                {weight / 1000}/{inventory.maxWeight / 1000}kg
-              </p>
-            )}
-          </div>
-          <WeightBar percent={inventory.maxWeight ? (weight / inventory.maxWeight) * 100 : 0} />
-        </div>
-        <div className="inventory-grid-container" ref={containerRef}>
-          <>
-            {inventory.items.slice(0, (page + 1) * PAGE_SIZE).map((item, index) => (
-              <InventorySlot
-                key={`${inventory.type}-${inventory.id}-${item.slot}`}
-                item={item}
-                ref={index === (page + 1) * PAGE_SIZE - 1 ? ref : null}
-                inventoryType={inventory.type}
-                inventoryGroups={inventory.groups}
-                inventoryId={inventory.id}
-              />
-            ))}
-          </>
-        </div>
-      </div>
-    </>
+    <div className={className ? `inv-grid ${className}` : 'inv-grid'}>
+      {visible.map((item, index) => (
+        <InventorySlot
+          key={`${inventory.type}-${inventory.id}-${item.slot}`}
+          item={item}
+          ref={paged && index === limit - 1 ? ref : null}
+          inventoryType={inventory.type}
+          inventoryGroups={inventory.groups}
+          inventoryId={inventory.id}
+        />
+      ))}
+    </div>
   );
 };
 

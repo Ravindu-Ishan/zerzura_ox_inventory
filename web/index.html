@@ -3,9 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700&display=swap" rel="stylesheet" />
+    <!-- Fonts are self-hosted woff2 declared in src/index.scss and bundled by vite.
+         A Google Fonts <link> cannot work here: there is no live network once this
+         page is running as FiveM NUI, so it would silently fall back in-game while
+         looking correct in the browser. -->
     <title>Ox Inventory</title>
   </head>
   <body>

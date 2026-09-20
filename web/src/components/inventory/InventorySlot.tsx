@@ -2,10 +2,8 @@ import React, { useCallback, useRef } from 'react';
 import { DragSource, Inventory, InventoryType, Slot, SlotWithItem } from '../../typings';
 import { useDrag, useDragDropManager, useDrop } from 'react-dnd';
 import { useAppDispatch } from '../../store';
-import WeightBar from '../utils/WeightBar';
 import { onDrop } from '../../dnd/onDrop';
 import { onBuy } from '../../dnd/onBuy';
-import { Items } from '../../store/items';
 import { canCraftItem, canPurchaseItem, getItemUrl, isSlotWithItem } from '../../helpers';
 import { onUse } from '../../dnd/onUse';
 import { Locale } from '../../store/locale';
@@ -122,23 +120,24 @@ const InventorySlot: React.ForwardRefRenderFunction<HTMLDivElement, SlotProps> =
 
   const refs = useMergeRefs([connectRef, ref]);
 
+  const hasItem = isSlotWithItem(item);
+  const unavailable =
+    !canPurchaseItem(item, { type: inventoryType, groups: inventoryGroups }) || !canCraftItem(item, inventoryType);
+
   return (
     <div
       ref={refs}
       onContextMenu={handleContext}
       onClick={handleClick}
-      className="inventory-slot"
+      className={hasItem ? 'slot' : 'slot empty'}
+      data-over={isOver || undefined}
+      data-unavailable={unavailable || undefined}
       style={{
-        filter:
-          !canPurchaseItem(item, { type: inventoryType, groups: inventoryGroups }) || !canCraftItem(item, inventoryType)
-            ? 'brightness(80%) grayscale(100%)'
-            : undefined,
         opacity: isDragging ? 0.4 : 1.0,
-        backgroundImage: `url(${item?.name ? getItemUrl(item as SlotWithItem) : 'none'}`,
-        border: isOver ? '1px dashed rgba(255,255,255,0.4)' : '',
+        backgroundImage: hasItem ? `url(${getItemUrl(item as SlotWithItem)})` : undefined,
       }}
     >
-      {isSlotWithItem(item) && (
+      {hasItem && (
         <div
           className="item-slot-wrapper"
           onMouseEnter={() => {
@@ -154,71 +153,37 @@ const InventorySlot: React.ForwardRefRenderFunction<HTMLDivElement, SlotProps> =
             }
           }}
         >
-          <div
-            className={
-              inventoryType === 'player' && item.slot <= 5 ? 'item-hotslot-header-wrapper' : 'item-slot-header-wrapper'
-            }
-          >
-            {inventoryType === 'player' && item.slot <= 5 && <div className="inventory-slot-number">{item.slot}</div>}
-            <div className="item-slot-info-wrapper">
-              <p>
-                {item.weight > 0
-                  ? item.weight >= 1000
-                    ? `${(item.weight / 1000).toLocaleString('en-us', {
-                        minimumFractionDigits: 2,
-                      })}kg `
-                    : `${item.weight.toLocaleString('en-us', {
-                        minimumFractionDigits: 0,
-                      })}g `
-                  : ''}
-              </p>
-              <p>{item.count ? item.count.toLocaleString('en-us') + `x` : ''}</p>
+          {/* Count reads top-right, clear of the durability bar along the bottom.
+              Weight moved into the tooltip - two stacked numbers on a 46px tile
+              was the noise the reskin set out to remove. */}
+          {item.count !== undefined && item.count > 1 && (
+            <span className="slot-count">{item.count.toLocaleString('en-us')}</span>
+          )}
+
+          {inventoryType === 'shop' && item?.price !== undefined && item.price > 0 && (
+            <span className="slot-price">
+              {item.currency && item.currency !== 'money' && item.currency !== 'black_money' ? (
+                <>
+                  <img src={getItemUrl(item.currency)} alt="" />
+                  {item.price.toLocaleString('en-us')}
+                </>
+              ) : (
+                <span data-dirty={item.currency === 'black_money' || undefined}>
+                  {Locale.$ || '$'}
+                  {item.price.toLocaleString('en-us')}
+                </span>
+              )}
+            </span>
+          )}
+
+          {inventoryType !== 'shop' && item?.durability !== undefined && (
+            <div className="slot-dur">
+              <span
+                className={item.durability < 25 ? 'low' : undefined}
+                style={{ width: `${Math.max(0, Math.min(item.durability, 100))}%` }}
+              />
             </div>
-          </div>
-          <div>
-            {inventoryType !== 'shop' && item?.durability !== undefined && (
-              <WeightBar percent={item.durability} durability />
-            )}
-            {inventoryType === 'shop' && item?.price !== undefined && (
-              <>
-                {item?.currency !== 'money' && item.currency !== 'black_money' && item.price > 0 && item.currency ? (
-                  <div className="item-slot-currency-wrapper">
-                    <img
-                      src={item.currency ? getItemUrl(item.currency) : 'none'}
-                      alt="item-image"
-                      style={{
-                        imageRendering: '-webkit-optimize-contrast',
-                        height: 'auto',
-                        width: '2vh',
-                        backfaceVisibility: 'hidden',
-                        transform: 'translateZ(0)',
-                      }}
-                    />
-                    <p>{item.price.toLocaleString('en-us')}</p>
-                  </div>
-                ) : (
-                  <>
-                    {item.price > 0 && (
-                      <div
-                        className="item-slot-price-wrapper"
-                        style={{ color: item.currency === 'money' || !item.currency ? '#2ECC71' : '#E74C3C' }}
-                      >
-                        <p>
-                          {Locale.$ || '$'}
-                          {item.price.toLocaleString('en-us')}
-                        </p>
-                      </div>
-                    )}
-                  </>
-                )}
-              </>
-            )}
-            <div className="inventory-slot-label-box">
-              <div className="inventory-slot-label-text">
-                {item.metadata?.label ? item.metadata.label : Items[item.name]?.label || item.name}
-              </div>
-            </div>
-          </div>
+          )}
         </div>
       )}
     </div>
