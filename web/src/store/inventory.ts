@@ -7,7 +7,7 @@ import {
   stackSlotsReducer,
   swapSlotsReducer,
 } from '../reducers';
-import { State } from '../typings';
+import { Appearance, State } from '../typings';
 
 const initialState: State = {
   leftInventory: {
@@ -24,6 +24,7 @@ const initialState: State = {
     maxWeight: 0,
     items: [],
   },
+  appearance: null,
   additionalMetadata: new Array(),
   itemAmount: 0,
   shiftPressed: false,
@@ -48,6 +49,14 @@ export const inventorySlice = createSlice({
       }
 
       state.additionalMetadata = [...state.additionalMetadata, ...metadata];
+    },
+    setAppearance: (state, action: PayloadAction<Appearance | undefined>) => {
+      // Lua serialises an empty table as `{}` (object, not array), so normalise
+      // rather than trusting the payload shape.
+      state.appearance = {
+        available: !!action.payload?.available,
+        slots: Array.isArray(action.payload?.slots) ? action.payload!.slots : [],
+      };
     },
     setItemAmount: (state, action: PayloadAction<number>) => {
       state.itemAmount = action.payload;
@@ -86,6 +95,7 @@ export const inventorySlice = createSlice({
 });
 
 export const {
+  setAppearance,
   setAdditionalMetadata,
   setItemAmount,
   setShiftPressed,
@@ -98,6 +108,7 @@ export const {
 } = inventorySlice.actions;
 export const selectLeftInventory = (state: RootState) => state.inventory.leftInventory;
 export const selectRightInventory = (state: RootState) => state.inventory.rightInventory;
+export const selectAppearance = (state: RootState) => state.inventory.appearance;
 export const selectItemAmount = (state: RootState) => state.inventory.itemAmount;
 export const selectIsBusy = (state: RootState) => state.inventory.isBusy;
 

@@ -2,9 +2,9 @@ import React, { useState } from 'react';
 import useNuiEvent from '../../hooks/useNuiEvent';
 import InventoryControl from './InventoryControl';
 import { useAppDispatch } from '../../store';
-import { refreshSlots, setAdditionalMetadata, setupInventory } from '../../store/inventory';
+import { refreshSlots, setAdditionalMetadata, setAppearance, setupInventory } from '../../store/inventory';
 import { useExitListener } from '../../hooks/useExitListener';
-import type { Inventory as InventoryProps } from '../../typings';
+import type { Appearance, Inventory as InventoryProps } from '../../typings';
 import RightInventory from './RightInventory';
 import LeftInventory from './LeftInventory';
 import Tooltip from '../utils/Tooltip';
@@ -35,6 +35,11 @@ const Inventory: React.FC = () => {
   });
 
   useNuiEvent('refreshSlots', (data) => dispatch(refreshSlots(data)));
+
+  // Real ped component/prop state for the Appearance card. Sent on inventory
+  // open and again after any clothing item is used - see
+  // modules/appearance/client.lua.
+  useNuiEvent<Appearance>('setAppearance', (data) => dispatch(setAppearance(data)));
 
   useNuiEvent('displayMetadata', (data: Array<{ metadata: string; value: string }>) => {
     dispatch(setAdditionalMetadata(data));

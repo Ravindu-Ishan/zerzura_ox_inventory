@@ -5,6 +5,7 @@ require 'modules.interface.client'
 
 local Utils = require 'modules.utils.client'
 local Weapon = require 'modules.weapon.client'
+local Appearance = require 'modules.appearance.client'
 local currentWeapon
 
 exports('getCurrentWeapon', function()
@@ -295,6 +296,11 @@ function client.openInventory(inv, data)
         }
     })
 
+    -- Kept as its own NUI event rather than folded into setupInventory: this is
+    -- ped state, not inventory state, and it also refreshes on its own after a
+    -- clothing item is used (modules/items/client.lua).
+    Appearance.refresh()
+
     if inv and not currentInventory.coords and inv ~= 'container' and inv ~= 'glovebox' then
         currentInventory.coords = GetEntityCoords(playerPed)
     end
@@ -352,6 +358,8 @@ RegisterNetEvent('ox_inventory:forceOpenInventory', function(left, right)
 			rightInventory = currentInventory
 		}
 	})
+
+	Appearance.refresh()
 end)
 
 local Animations = lib.load('data.animations')
@@ -1614,6 +1622,11 @@ RegisterNetEvent('ox_inventory:viewInventory', function(left, right)
 			rightInventory = currentInventory
 		}
 	})
+
+	-- Inspecting another player still reads the LOCAL ped, because that is the
+	-- only ped this export can be trusted for - the card belongs to the player
+	-- whose UI this is.
+	Appearance.refresh()
 end)
 
 RegisterNUICallback('uiLoaded', function(_, cb)

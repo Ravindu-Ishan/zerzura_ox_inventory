@@ -85,6 +85,22 @@ debugData([
       },
     },
   },
+  {
+    // Shaped exactly like modules/appearance/client.lua's payload: Head empty
+    // (prop -1), Mask empty (drawable 0), and the three always-worn slots.
+    action: 'setAppearance',
+    data: {
+      available: true,
+      slots: [
+        { key: 'head', kind: 'prop', id: 0, drawable: -1, texture: 0, filled: false, canBeEmpty: true },
+        { key: 'mask', kind: 'component', id: 1, drawable: 0, texture: 0, filled: false, canBeEmpty: true },
+        { key: 'torso', kind: 'component', id: 11, drawable: 12, texture: 2, filled: true, canBeEmpty: false },
+        { key: 'armour', kind: 'component', id: 9, drawable: 4, texture: 1, filled: true, canBeEmpty: true },
+        { key: 'legs', kind: 'component', id: 4, drawable: 4, texture: 1, filled: true, canBeEmpty: false },
+        { key: 'feet', kind: 'component', id: 6, drawable: 7, texture: 0, filled: true, canBeEmpty: false },
+      ],
+    },
+  },
 ]);
 
 const App: React.FC = () => {

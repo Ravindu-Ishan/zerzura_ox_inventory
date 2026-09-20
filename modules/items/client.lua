@@ -1,6 +1,7 @@
 if not lib then return end
 
 local Items = require 'modules.items.shared' --[[@as table<string, OxClientItem>]]
+local Appearance = require 'modules.appearance.client'
 
 local function sendDisplayMetadata(data)
     SendNUIMessage({
@@ -158,31 +159,36 @@ Item('clothing', function(data, slot)
 	end
 
 	ox_inventory:useItem(data, function(data)
-		if data then
-			metadata = data.metadata
+		if not data then return end
 
-			if metadata.prop then
-				local prop = GetPedPropIndex(cache.ped, metadata.prop)
-				local texture = GetPedPropTextureIndex(cache.ped, metadata.prop)
+		metadata = data.metadata
 
-				if metadata.drawable == prop and metadata.texture == texture then
-					return ClearPedProp(cache.ped, metadata.prop)
-				end
+		if metadata.prop then
+			local prop = GetPedPropIndex(cache.ped, metadata.prop)
+			local texture = GetPedPropTextureIndex(cache.ped, metadata.prop)
 
+			if metadata.drawable == prop and metadata.texture == texture then
+				ClearPedProp(cache.ped, metadata.prop)
+			else
 				-- { prop = 0, drawable = 2, texture = 1 } = grey beanie
 				SetPedPropIndex(cache.ped, metadata.prop, metadata.drawable, metadata.texture, false);
-			elseif metadata.component then
-				local drawable = GetPedDrawableVariation(cache.ped, metadata.component)
-				local texture = GetPedTextureVariation(cache.ped, metadata.component)
+			end
+		elseif metadata.component then
+			local drawable = GetPedDrawableVariation(cache.ped, metadata.component)
+			local texture = GetPedTextureVariation(cache.ped, metadata.component)
 
-				if metadata.drawable == drawable and metadata.texture == texture then
-					return -- item matches (setup defaults so we can strip?)
-				end
-
+			-- if it matches, the item is already worn and nothing changes
+			-- (setup defaults so we can strip?)
+			if metadata.drawable ~= drawable or metadata.texture ~= texture then
 				-- { component = 4, drawable = 4, texture = 1 } = jeans w/ belt
 				SetPedComponentVariation(cache.ped, metadata.component, metadata.drawable, metadata.texture, 0);
 			end
 		end
+
+		-- Native ped state has (possibly) just changed - re-read it and push the
+		-- fresh worn/not-worn state to the Appearance card. The early `return`s
+		-- above were flattened into if/else purely so this always runs.
+		Appearance.refresh()
 	end)
 end)
 
