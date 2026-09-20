@@ -1,0 +1,337 @@
+/* ==========================================================================
+   z-inventory design draft v6 - POLISH PASS. Static mockup only.
+   Tokens/patterns copied from ui-theme-guide.md (ZERZURA_QBOX repo root).
+
+   Structure is unchanged from v6 and intentionally so:
+   - one connected frame: full-height left column + full-height right column +
+     full-width action bar, centre deliberately clear for the ped
+   - left column = Appearance card, real gap, then ONE card holding categories,
+     search, capacity and the grid (genuinely one continuous unit)
+   - filled icon glyphs, keybind badges, no hotbar
+
+   This pass is craft only:
+   - ONE 10px gutter (--pad) used by every row in every block, so the appearance
+     tiles, category strip, search field, capacity bar, section labels and the
+     item grid all share a left/right edge.
+   - Appearance tiles moved onto the same 6-column track as the item slots, so
+     the two grids line up pixel for pixel instead of nearly lining up.
+   - Category row rebuilt on the guide's own .tab pattern (flat segment +
+     accent underline) instead of another row of small square tiles.
+   - Item art is real filled SVG, not 3-letter text in a box.
+   - Accent reduced to exactly four jobs (guide 2.2): active category, selected
+     slot, capacity fill, the one primary keybind. Equipped-appearance tiles and
+     durability bars no longer spend it.
+   - Texture is hard-stop repeating patterns only (capacity notches, the ground
+     panel hatch) - flat colour bands with no interpolation, the same technique
+     the guide already blesses for the slider track. No soft gradients, no
+     shadows (bar the one documented inset focus bar), no blur.
+   ========================================================================== */
+
+:root {
+  --color-ink:          #05070b;
+  --color-panel:        #11151d;
+  --color-raised:       #1b2029;
+  --color-raised-2:     #232936;
+  --color-band:         #272c38;
+  --color-panel-border: rgba(255, 255, 255, 0.09);
+  --color-hairline:     rgba(255, 255, 255, 0.07);
+
+  --color-accent:       #2ee6c8;
+  --color-accent-soft:  rgba(46, 230, 200, 0.14);
+  --color-accent-ink:   #04241f;
+
+  --color-danger:       #ee4036;
+
+  --color-fg:           #eef1f5;
+  --color-muted:        rgba(238, 241, 245, 0.58);
+  --color-faint:        rgba(238, 241, 245, 0.32);
+
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-sans:    "Barlow", system-ui, sans-serif;
+
+  --col-width:  320px;   /* narrow on purpose - the ped owns the centre */
+  --pad:        10px;    /* THE gutter. every block row uses it. */
+  --gap:         8px;    /* gap between blocks of the frame */
+  --gap-cell:    4px;    /* gap inside a tile grid */
+  --tile-border: rgba(255, 255, 255, 0.06);
+  --tile-border-hover: rgba(255, 255, 255, 0.26);
+}
+
+*, *::before, *::after { border-radius: 0; box-sizing: border-box; }
+
+body { margin: 0; font-family: var(--font-sans); color: var(--color-fg); font-feature-settings: "tnum" 1; background: #05070b; }
+
+.t-display { font-family: var(--font-display); text-transform: uppercase; font-weight: 700; letter-spacing: 0.005em; line-height: 1; }
+.t-eyebrow { font-family: var(--font-display); text-transform: uppercase; font-weight: 600; font-size: 10.5px; letter-spacing: 0.16em; color: var(--color-faint); line-height: 1; }
+.t-label   { font-family: var(--font-display); text-transform: uppercase; font-weight: 600; font-size: 11.5px; letter-spacing: 0.05em; color: var(--color-muted); line-height: 1; }
+.t-num     { font-variant-numeric: tabular-nums; }
+
+/* the inline <symbol> sprite itself must not take up space */
+.icon-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+svg { display: block; fill: currentColor; }
+
+/* ==========================================================================
+   doc chrome (review page furniture - NOT part of the HUD)
+   ========================================================================== */
+.doc-header { background: #05070b; border-bottom: 1px solid var(--color-panel-border); padding: 22px 28px 24px; }
+.doc-header h1 { font-family: var(--font-display); text-transform: uppercase; font-size: 23px; letter-spacing: 0.005em; margin: 0 0 8px; }
+.doc-header p { margin: 0; max-width: 940px; font-size: 13.5px; line-height: 1.55; color: var(--color-muted); }
+.doc-tag { display: inline-block; font-family: var(--font-display); text-transform: uppercase; font-weight: 700; font-size: 10.5px; letter-spacing: 0.12em; color: var(--color-accent-ink); background: var(--color-accent); padding: 4px 9px; margin-bottom: 12px; line-height: 1; }
+.changelog { margin: 16px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 6px; }
+.changelog li { font-size: 11.5px; line-height: 1.4; color: var(--color-muted); background: rgba(255, 255, 255, 0.05); padding: 5px 10px; border-left: 2px solid var(--color-accent); }
+.changelog code { font-family: var(--font-sans); color: var(--color-fg); }
+.stage-label { font-family: var(--font-display); text-transform: uppercase; font-weight: 600; font-size: 13px; letter-spacing: 0.08em; color: var(--color-muted); padding: 20px 28px 12px; border-top: 1px solid var(--color-panel-border); background: #05070b; }
+.stage-label span { color: var(--color-accent); }
+
+/* ---- stage: fake "live scene" behind the HUD, review-only ---- */
+.stage { position: relative; height: 900px; background: radial-gradient(ellipse 720px 820px at 50% 44%, rgba(64, 78, 108, 0.34), transparent 70%), linear-gradient(135deg, #2b3550 0%, #182135 45%, #0c111c 100%); overflow: hidden; }
+
+.ped-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; }
+.ped-placeholder .head { width: 40px; height: 40px; background: rgba(255, 255, 255, 0.13); margin-bottom: 5px; }
+.ped-placeholder .body { width: 90px; height: 240px; background: rgba(255, 255, 255, 0.09); }
+.ped-placeholder .caption { margin-top: 14px; font-family: var(--font-display); text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.1em; color: rgba(255, 255, 255, 0.34); text-align: center; line-height: 1.5; }
+
+/* ==========================================================================
+   shared blocks (guide 4.3)
+   ========================================================================== */
+.panel { border: 1px solid var(--color-panel-border); background: rgba(17, 21, 29, 0.93); }
+.band  { background: rgba(39, 44, 56, 0.95); }
+.band-underline { height: 4px; background: rgba(255, 255, 255, 0.16); flex-shrink: 0; }
+.band-underline.thin { height: 2px; background: rgba(255, 255, 255, 0.10); }
+
+/* the heavy header plate - one per block that owns a container */
+.block-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; padding: 9px var(--pad) 10px; flex-shrink: 0; }
+.block-head h2 { margin: 0; font-size: 16px; }
+.block-head .t-eyebrow { white-space: nowrap; }
+
+/* the light header strip - for a subordinate section inside the column */
+.section-band { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 7px var(--pad) 8px; background: rgba(39, 44, 56, 0.55); }
+.band-meta { font-family: var(--font-display); font-weight: 600; font-size: 11px; letter-spacing: 0.06em; color: var(--color-faint); line-height: 1; }
+
+/* ==========================================================================
+   THE FRAME - 3 pieces: left column, right column, bottom bar.
+   Centre column is left empty on purpose: the ped stands there.
+   ========================================================================== */
+.hud-frame {
+  position: absolute;
+  inset: 22px;
+  display: grid;
+  grid-template-columns: var(--col-width) 1fr var(--col-width);
+  grid-template-rows: 1fr 48px;
+  gap: var(--gap);
+}
+
+.frame-left   { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; gap: var(--gap); min-height: 0; }
+.frame-center { grid-column: 2; grid-row: 1; display: flex; align-items: center; justify-content: center; }
+.frame-right  { grid-column: 3; grid-row: 1; min-height: 0; }
+.frame-bottom { grid-column: 1 / -1; grid-row: 2; }
+
+.frame-left > .panel { flex-shrink: 0; }
+.frame-left > .panel.body-block { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+.frame-right > .panel { height: 100%; display: flex; flex-direction: column; }
+
+.col-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+.col-scroll::-webkit-scrollbar { width: 6px; }
+.col-scroll::-webkit-scrollbar-track { background: rgba(0, 0, 0, 0.22); }
+.col-scroll::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.18); }
+.col-scroll::-webkit-scrollbar-thumb:hover { background: var(--color-accent); }
+
+/* ==========================================================================
+   block A - Appearance. Its own card with a real gap below it.
+   Tiles sit on the SAME 6-column track as the item grid so the two line up.
+   ========================================================================== */
+.accessories { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--gap-cell); padding: var(--pad); }
+.acc-slot {
+  position: relative; aspect-ratio: 1 / 1;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--color-raised-2); border: 1px solid var(--tile-border);
+  --icon-bg: var(--color-raised-2);
+  transition: border-color 110ms linear, background 110ms linear;
+}
+.acc-slot svg { width: 52%; height: 52%; color: rgba(238, 241, 245, 0.8); }
+/* empty is a recessed well with a ghosted glyph - it reads as "slot, nothing in it"
+   rather than "broken tile". No accent here: equipped is the normal state. */
+.acc-slot[data-filled="false"] { background: rgba(35, 41, 54, 0.34); border-color: rgba(255, 255, 255, 0.045); --icon-bg: #171b24; }
+.acc-slot[data-filled="false"] svg { color: rgba(238, 241, 245, 0.16); }
+.acc-slot:hover { border-color: var(--tile-border-hover); }
+
+/* ==========================================================================
+   block B - categories + search + capacity + grid (one continuous unit)
+   ========================================================================== */
+
+/* Category filter, built on the guide's .tab pattern (5.2): flat segments,
+   accent underline for the active one. Full-width segments read as chrome,
+   which is what stops it looking like a second row of item tiles. */
+.categories { display: flex; gap: 1px; padding: 0 var(--pad); margin-top: var(--pad); border-bottom: 1px solid var(--color-hairline); flex-shrink: 0; }
+.cat-btn {
+  flex: 1; height: 32px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border: 0; border-bottom: 2px solid transparent;
+  background: rgba(255, 255, 255, 0.025); color: rgba(238, 241, 245, 0.45);
+  cursor: pointer;
+  transition: background 110ms linear, color 110ms linear, border-color 110ms linear;
+  --icon-bg: #1b2029;
+}
+.cat-btn svg { width: 15px; height: 15px; }
+.cat-btn:hover { background: rgba(255, 255, 255, 0.06); color: var(--color-fg); }
+.cat-btn[data-active="true"] { background: rgba(46, 230, 200, 0.10); border-bottom-color: var(--color-accent); color: var(--color-accent); --icon-bg: #10312e; }
+
+/* Search. Flex row instead of an absolutely-positioned magic-number icon, so the
+   glyph and the caret stay on the same baseline at any height. */
+.search-row { padding: var(--pad) var(--pad) 0; flex-shrink: 0; }
+.search-field {
+  display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 9px;
+  border: 1px solid var(--color-panel-border); background: rgba(0, 0, 0, 0.35);
+  transition: border-color 110ms linear, background 110ms linear;
+}
+.search-field svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--color-faint); transition: color 110ms linear; }
+.search-field input { flex: 1; min-width: 0; height: 100%; border: 0; background: transparent; color: var(--color-fg); font-family: var(--font-sans); font-size: 12.5px; outline: none; }
+.search-field input::placeholder { color: var(--color-faint); }
+/* guide 5.5 - the ONE box-shadow in the system: a hard 2px inset accent bar */
+.search-field:focus-within { border-color: rgba(46, 230, 200, 0.45); background: rgba(0, 0, 0, 0.5); box-shadow: inset 0 -2px 0 0 var(--color-accent); }
+.search-field:focus-within svg { color: var(--color-accent); }
+
+/* ---- capacity: one pool, weight + slots on one line, segmented track ---- */
+.capacity { padding: var(--pad); flex-shrink: 0; }
+.capacity-row { display: flex; align-items: baseline; gap: 8px; margin-bottom: 6px; }
+.cap-slots  { font-family: var(--font-display); font-weight: 600; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--color-faint); }
+.cap-weight { margin-left: auto; font-size: 11.5px; color: var(--color-faint); white-space: nowrap; }
+.cap-weight b { font-weight: 600; font-size: 13px; color: var(--color-fg); }
+.capacity-track { position: relative; height: 6px; width: 100%; background: rgba(255, 255, 255, 0.09); overflow: hidden; }
+.capacity-fill { display: block; height: 100%; background: var(--color-accent); }
+/* 1px notches every 10% - a hard-stop repeating pattern (flat bands, no
+   interpolation), so the bar reads as a gauge rather than a progress bar. */
+.capacity-track::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(to right,
+    rgba(17, 21, 29, 0) 0, rgba(17, 21, 29, 0) calc(10% - 1px),
+    rgba(9, 12, 17, 0.9) calc(10% - 1px), rgba(9, 12, 17, 0.9) 10%);
+}
+/* defined for the near-full case; severity red is the only other fill allowed */
+.capacity-fill[data-level="full"] { background: var(--color-danger); }
+
+/* ---- section headers inside the scroll area (Pockets / Backpack) ----
+   sticky so you always know which container you are looking at; near-opaque so
+   rows genuinely disappear behind it (no blur available - guide 6.1). */
+.grid-band {
+  position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 7px var(--pad) 7px calc(var(--pad) - 2px);
+  background: rgba(24, 29, 38, 0.98);
+  border-bottom: 1px solid var(--color-hairline);
+  border-left: 2px solid rgba(255, 255, 255, 0.26);
+}
+/* Pockets sits outside .col-scroll (it never scrolls - only Backpack does,
+   and only if it doesn't fit), so it doesn't need sticky positioning. */
+.grid-band.static { position: static; }
+
+/* ==========================================================================
+   the item grid
+   ========================================================================== */
+.inv-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: var(--gap-cell); padding: var(--pad) var(--pad) calc(var(--pad) + 2px); }
+.inv-grid.pad-top { padding-top: 0; }
+
+.slot {
+  position: relative; aspect-ratio: 1 / 1;
+  display: flex; align-items: center; justify-content: center; overflow: hidden;
+  background: var(--color-raised-2); border: 1px solid var(--tile-border);
+  --icon-bg: var(--color-raised-2);
+  transition: border-color 110ms linear, background 110ms linear;
+}
+.slot-ico { width: 56%; height: 56%; color: rgba(238, 241, 245, 0.82); }
+.slot:hover { border-color: var(--tile-border-hover); }
+
+/* empty: recessed, quieter border, one flat 4px marker. Deliberately a marker
+   and not a dashed outline - nothing in GTA's HUD is dashed. */
+.slot.empty { background: rgba(35, 41, 54, 0.32); border-color: rgba(255, 255, 255, 0.04); }
+.slot.empty::after { content: ""; width: 4px; height: 4px; background: rgba(255, 255, 255, 0.10); }
+.slot.empty:hover { border-color: rgba(255, 255, 255, 0.16); }
+
+/* selected: accent border + flat accent wash + the system's 5px square marker
+   (guide 5.3). No ring shadow, no lift. */
+.slot.selected { border-color: var(--color-accent); background: #264048; --icon-bg: #264048; }
+.slot.selected .slot-ico { color: var(--color-accent); }
+.slot.selected::before { content: ""; position: absolute; left: 0; top: 0; width: 5px; height: 5px; background: var(--color-accent); }
+
+/* count reads top-right, out of the way of the durability bar at the bottom */
+.slot-count {
+  position: absolute; right: 0; top: 0;
+  min-width: 15px; height: 13px; padding: 0 3px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(5, 7, 11, 0.82);
+  font-family: var(--font-display); font-weight: 700; font-size: 10px; line-height: 1;
+  font-variant-numeric: tabular-nums; color: rgba(238, 241, 245, 0.92);
+}
+/* durability is neutral until it matters - spending accent on every worn item
+   would dilute it (guide 2.2) */
+.slot-dur { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(0, 0, 0, 0.5); }
+.slot-dur > span { display: block; height: 100%; background: rgba(238, 241, 245, 0.5); }
+.slot-dur > span.low { background: var(--color-danger); }
+
+/* ==========================================================================
+   right column, collapsed (nothing nearby)
+   ========================================================================== */
+.ground-collapsed {
+  width: 100%; height: 100%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+  cursor: pointer;
+  /* hard-stop diagonal hatch: flat 2px bands, no interpolation. Gives the empty
+     column a surface so it reads as a drop target, not a dead rectangle. */
+  background-image: repeating-linear-gradient(135deg,
+    rgba(255, 255, 255, 0.03) 0, rgba(255, 255, 255, 0.03) 2px,
+    rgba(255, 255, 255, 0) 2px, rgba(255, 255, 255, 0) 10px);
+  transition: background-color 110ms linear;
+}
+.ground-collapsed svg { width: 20px; height: 20px; color: var(--color-faint); transition: color 110ms linear; }
+.ground-collapsed span { writing-mode: vertical-rl; transform: rotate(180deg); font-family: var(--font-display); text-transform: uppercase; font-weight: 600; font-size: 11px; letter-spacing: 0.16em; color: var(--color-faint); transition: color 110ms linear; }
+.ground-collapsed:hover { background-color: rgba(46, 230, 200, 0.07); }
+.ground-collapsed:hover svg,
+.ground-collapsed:hover span { color: var(--color-accent); }
+
+/* ==========================================================================
+   bottom action bar - keybind badges, meant to read like GTA's own prompts
+   ========================================================================== */
+.action-bar { display: flex; align-items: stretch; height: 100%; padding: 0 4px; }
+.action-item { display: flex; align-items: center; gap: 8px; padding: 0 12px; transition: background 110ms linear; }
+.action-item:hover { background: rgba(255, 255, 255, 0.05); }
+.action-item .key {
+  display: flex; align-items: center; justify-content: center;
+  min-width: 22px; height: 20px; padding: 0 5px;
+  background: rgba(255, 255, 255, 0.13); border: 1px solid rgba(255, 255, 255, 0.10);
+  font-family: var(--font-display); font-weight: 700; font-size: 11px; letter-spacing: 0.02em; line-height: 1;
+  color: var(--color-fg);
+}
+.action-item .label { font-family: var(--font-display); text-transform: uppercase; font-weight: 600; font-size: 12.5px; letter-spacing: 0.05em; line-height: 1; color: var(--color-muted); }
+/* exactly one primary per screen (guide 2.3) - the contextual action */
+.action-item[data-primary="true"] .key { background: var(--color-accent); border-color: var(--color-accent); color: var(--color-accent-ink); }
+.action-item[data-primary="true"] .label { color: var(--color-fg); }
+.action-divider { width: 1px; align-self: center; height: 16px; background: rgba(255, 255, 255, 0.12); }
+.action-hint { margin-left: auto; align-self: center; padding: 0 12px; font-size: 11.5px; color: var(--color-faint); }
+.action-hint b { font-weight: 600; color: var(--color-muted); }
+
+/* ==========================================================================
+   hover tooltip
+   ========================================================================== */
+.tooltip-h { position: absolute; width: 238px; z-index: 5; }
+.tip-head { padding: 8px var(--pad) 9px; }
+.tip-head .t-eyebrow { display: block; margin-bottom: 5px; }
+.tip-head h3 { margin: 0; font-size: 17px; }
+.tip-body { display: flex; gap: var(--pad); padding: var(--pad); }
+.tip-art { width: 54px; height: 54px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; background: var(--color-raised-2); border: 1px solid var(--tile-border); --icon-bg: var(--color-raised-2); }
+.tip-art svg { width: 60%; height: 60%; color: rgba(238, 241, 245, 0.82); }
+.tip-stats { margin: 0; flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; gap: 4px; }
+.tip-stats > div { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.tip-stats dt { font-family: var(--font-display); text-transform: uppercase; font-weight: 600; font-size: 10.5px; letter-spacing: 0.08em; color: var(--color-faint); }
+.tip-stats dd { margin: 0; font-size: 11.5px; color: var(--color-fg); }
+.tip-dur { padding: 0 var(--pad) var(--pad); }
+
+/* ==========================================================================
+   notes (review page furniture - NOT part of the HUD)
+   ========================================================================== */
+.notes { background: #05070b; padding: 28px 28px 44px; border-top: 1px solid var(--color-panel-border); }
+.notes h2 { font-family: var(--font-display); text-transform: uppercase; font-size: 16px; letter-spacing: 0.005em; margin: 0 0 16px; }
+.notes-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px; }
+.note-card { padding: 15px 16px 16px; }
+.note-card .num { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; background: var(--color-accent); color: var(--color-accent-ink); font-family: var(--font-display); font-weight: 700; font-size: 11px; line-height: 1; margin-bottom: 10px; }
+.note-card h3 { margin: 0 0 7px; font-family: var(--font-display); text-transform: uppercase; font-weight: 700; font-size: 14px; letter-spacing: 0.02em; line-height: 1.15; }
+.note-card p { margin: 0; font-size: 12.5px; line-height: 1.55; color: var(--color-muted); }

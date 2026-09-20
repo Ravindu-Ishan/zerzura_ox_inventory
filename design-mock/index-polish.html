@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>z-inventory — design draft v6 · polish</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Barlow:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style-polish.css" />
+</head>
+<body>
+
+<!-- Review artifact only - Google Fonts <link> for convenience (the real resource must use
+     next/font, see ui-theme-guide.md 3.2), nothing wired to react/vite, no JS.
+     Item art is a hand-rolled inline <symbol> sprite - same "inline SVG paths, never a hosted
+     icon font" rule as ui/Icon.tsx, but FILLED rather than stroke-only (deliberate: stroke
+     icons disappear at 46px inside a busy grid). -->
+
+<svg class="icon-defs" aria-hidden="true" focusable="false"><defs>
+
+  <!-- ui / category -->
+  <symbol id="i-grid" viewBox="0 0 24 24" fill="currentColor">
+    <rect x="3" y="3" width="7.5" height="7.5"/><rect x="13.5" y="3" width="7.5" height="7.5"/>
+    <rect x="3" y="13.5" width="7.5" height="7.5"/><rect x="13.5" y="13.5" width="7.5" height="7.5"/>
+  </symbol>
+  <symbol id="i-search" viewBox="0 0 24 24" fill="currentColor">
+    <path fill-rule="evenodd" d="M10.5 3.5a7 7 0 1 0 4.5 12.4l4.8 4.8 1.4-1.4-4.8-4.8a7 7 0 0 0-5.9-11Zm0 2a5 5 0 1 1 0 10 5 5 0 0 1 0-10Z"/>
+  </symbol>
+  <symbol id="i-drop" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M10.4 2.6h3.2v8.6h4.4L12 18.2 6 11.2h4.4Z"/><rect x="3.6" y="19.6" width="16.8" height="2"/>
+  </symbol>
+  <symbol id="i-cube" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2 21.5 7.1v9.8L12 22 2.5 16.9V7.1Z"/>
+    <path style="fill:var(--icon-bg)" d="M12 12.1 21.5 7.1v1.7L12.9 13.4v8.1h-1.8v-8.1L2.5 8.8V7.1Z"/>
+  </symbol>
+  <symbol id="i-droplet" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2.4s7.4 8 7.4 12A7.4 7.4 0 1 1 4.6 14.4c0-4 7.4-12 7.4-12Z"/>
+    <path style="fill:var(--icon-bg)" d="M12 18.6a4.2 4.2 0 0 1-4.2-4.2h1.8A2.4 2.4 0 0 0 12 16.8Z"/>
+  </symbol>
+
+  <!-- appearance -->
+  <symbol id="i-head" viewBox="0 0 24 24" fill="currentColor">
+    <circle cx="12" cy="7.6" r="4.2"/><path d="M3.6 21.4c0-4.6 3.8-7.6 8.4-7.6s8.4 3 8.4 7.6v.2H3.6Z"/>
+  </symbol>
+  <symbol id="i-mask" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 2.6c4.2 0 7.3 3.4 7.3 7.6 0 2.7-1 4.2-1 6.6 0 1.8-1.6 2.6-3.1 2.6H8.8c-1.5 0-3.1-.8-3.1-2.6 0-2.4-1-3.9-1-6.6C4.7 6 7.8 2.6 12 2.6Z"/>
+    <ellipse style="fill:var(--icon-bg)" cx="9.3" cy="11.4" rx="1.4" ry="1.7"/>
+    <ellipse style="fill:var(--icon-bg)" cx="14.7" cy="11.4" rx="1.4" ry="1.7"/>
+    <rect style="fill:var(--icon-bg)" x="10" y="15.6" width="4" height="1.4"/>
+  </symbol>
+  <symbol id="i-jacket" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M8.3 2.6 3.6 6.7l2.8 3.2 1.5-1V21.4h8.2V8.9l1.5 1 2.8-3.2-4.7-4.1c-.9 1.4-2.2 2.2-3.7 2.2S9.2 4 8.3 2.6Z"/>
+    <rect style="fill:var(--icon-bg)" x="11.4" y="8.6" width="1.2" height="12.8"/>
+  </symbol>
+  <symbol id="i-armor" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M8 2.6 3.6 4.8l1.1 5.1-2.1 1.1 1.1 10.4h16.6l1.1-10.4-2.1-1.1 1.1-5.1-4.4-2.2L12 4.8Z"/>
+    <rect style="fill:var(--icon-bg)" x="9.8" y="8.8" width="4.4" height="4.4"/>
+  </symbol>
+  <symbol id="i-legs" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M6.4 2.4h11.2l.9 19.2h-5L12 11.8l-1.5 9.8h-5Z"/>
+    <rect style="fill:var(--icon-bg)" x="6.5" y="6.2" width="11" height="1.4"/>
+  </symbol>
+  <symbol id="i-boots" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M5.4 2.4h5.4v10.6h4.4a4.8 4.8 0 0 1 4.8 4.8v2H5.4Z"/>
+    <rect x="3.6" y="19.8" width="17.8" height="2.2"/>
+    <rect style="fill:var(--icon-bg)" x="5.5" y="12.4" width="5.2" height="1.3"/>
+  </symbol>
+
+  <!-- items -->
+  <symbol id="i-pistol" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M2 6.2h20v4.6h-4.1l-.7 2H13l-1.5 8.6H7.1l1.5-8.6H4.4A2.4 2.4 0 0 1 2 9.8Z"/>
+  </symbol>
+  <symbol id="i-rifle" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M1.6 8.4h6.2l1.6-2h3.4l1.4 2h8.2v3.1h-3.6l-1.1 1.9H14v1.6h-2.3l-.6 3.4H8.3l.6-3.4H7.4L5 18.8H2.1l2.6-4.4H1.6Z"/>
+  </symbol>
+  <symbol id="i-water" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M9.2 1.6h5.6v3H9.2Z"/>
+    <path d="M8.6 5.3h6.8L17 8.4V22H7V8.4Z"/>
+    <rect style="fill:var(--icon-bg)" x="7" y="12.6" width="10" height="4.2"/>
+  </symbol>
+  <symbol id="i-id" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M1.8 4.2h20.4v15.6H1.8Z"/>
+    <circle style="fill:var(--icon-bg)" cx="8" cy="10" r="2.4"/>
+    <path style="fill:var(--icon-bg)" d="M4 17.2c0-2.3 1.8-3.6 4-3.6s4 1.3 4 3.6Z"/>
+    <rect style="fill:var(--icon-bg)" x="14" y="8.6" width="6" height="1.6"/>
+    <rect style="fill:var(--icon-bg)" x="14" y="11.6" width="6" height="1.6"/>
+    <rect style="fill:var(--icon-bg)" x="14" y="14.6" width="4" height="1.6"/>
+  </symbol>
+  <symbol id="i-burger" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M2.6 8.8c0-3.5 4.2-6.2 9.4-6.2s9.4 2.7 9.4 6.2v.6H2.6Z"/>
+    <rect x="2.6" y="10.8" width="18.8" height="2.6"/>
+    <rect x="2.6" y="14.6" width="18.8" height="2"/>
+    <path d="M2.6 17.9h18.8v.8c0 1.5-1.2 2.7-2.7 2.7H5.3a2.7 2.7 0 0 1-2.7-2.7Z"/>
+  </symbol>
+  <symbol id="i-bandage" viewBox="0 0 24 24" fill="currentColor">
+    <g transform="rotate(-35 12 12)">
+      <path d="M1.6 8h20.8v8H1.6Z"/>
+      <rect style="fill:var(--icon-bg)" x="8" y="8" width="8" height="8"/>
+      <circle cx="10.4" cy="10.4" r=".95"/><circle cx="13.6" cy="10.4" r=".95"/>
+      <circle cx="10.4" cy="13.6" r=".95"/><circle cx="13.6" cy="13.6" r=".95"/>
+    </g>
+  </symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M12 1.8A5.4 5.4 0 0 0 6.6 7.2V10h3.1V7.2a2.3 2.3 0 0 1 4.6 0V10h3.1V7.2A5.4 5.4 0 0 0 12 1.8Z"/>
+    <path d="M4.2 10h15.6v12H4.2Z"/>
+    <circle style="fill:var(--icon-bg)" cx="12" cy="14.8" r="1.9"/>
+    <path style="fill:var(--icon-bg)" d="M10.9 15.4h2.2l.6 4.2h-3.4Z"/>
+  </symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M4.8 1.6h14.4v20.8H4.8Z"/>
+    <rect style="fill:var(--icon-bg)" x="6.6" y="5.2" width="10.8" height="13"/>
+    <rect style="fill:var(--icon-bg)" x="10" y="3.1" width="4" height="1.2"/>
+    <rect style="fill:var(--icon-bg)" x="10.4" y="19.4" width="3.2" height="1.6"/>
+  </symbol>
+  <symbol id="i-rope" viewBox="0 0 24 24" fill="currentColor">
+    <path fill-rule="evenodd" d="M12 3c4.9 0 8.9 1.8 8.9 4s-4 4-8.9 4-8.9-1.8-8.9-4 4-4 8.9-4Zm0 2.2c-3.4 0-6.1.8-6.1 1.8s2.7 1.8 6.1 1.8 6.1-.8 6.1-1.8-2.7-1.8-6.1-1.8Z"/>
+    <path fill-rule="evenodd" d="M12 12.6c4.9 0 8.9 1.8 8.9 4s-4 4-8.9 4-8.9-1.8-8.9-4 4-4 8.9-4Zm0 2.2c-3.4 0-6.1.8-6.1 1.8s2.7 1.8 6.1 1.8 6.1-.8 6.1-1.8-2.7-1.8-6.1-1.8Z"/>
+  </symbol>
+  <symbol id="i-ammo" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M6 2.4 7.6 5.2V8.6H4.4V5.2Z"/>
+    <path d="M12 2.4 13.6 5.2V8.6h-3.2V5.2Z"/>
+    <path d="M18 2.4 19.6 5.2V8.6h-3.2V5.2Z"/>
+    <path d="M2.4 10.2h19.2V21.6H2.4Z"/>
+    <rect style="fill:var(--icon-bg)" x="2.4" y="14" width="19.2" height="2.8"/>
+  </symbol>
+  <symbol id="i-wrench" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M17.6 2.2 14 5.8l2.1 2.1 3.6-3.6a5.9 5.9 0 0 1-7.5 7.6l-7.9 7.9L2 17.6l7.9-7.9a5.9 5.9 0 0 1 7.7-7.5Z"/>
+  </symbol>
+
+</defs></svg>
+
+<header class="doc-header">
+  <span class="doc-tag">Draft v6 · polish pass</span>
+  <h1>z-inventory — reskin, round 6 (refined)</h1>
+  <p>
+    Structure is unchanged from v6 and deliberately so: one connected frame (full-height left
+    column, full-height right column, full-width action bar) with the centre left clear for the
+    ped; the left column is still Appearance as its own card, then a second card holding
+    categories, search, capacity and the grid as one continuous "browse your inventory" unit.
+    This pass is craft only — alignment, rhythm, hierarchy and real item art in place of the
+    three-letter placeholder boxes.
+  </p>
+  <ul class="changelog">
+    <li>Real filled item glyphs replace the "PST / H2O / BRG" text tiles</li>
+    <li>One 10px gutter everywhere — appearance tiles now sit on the same 6-column grid as the slots</li>
+    <li>Category row rebuilt as the guide's own <code>.tab</code> segment strip</li>
+    <li>Segmented capacity bar with slot counts; sticky Backpack section header</li>
+    <li>Accent pulled back to four uses: active category, selected slot, capacity fill, primary keybind</li>
+    <li>Slot counts corrected to the real config (50 player / 41 sedan trunk)</li>
+    <li>Character name moved to the Appearance card's own header (was sitting above the inventory card instead)</li>
+    <li>Only Backpack scrolls now — Pockets stays fully visible always; Backpack scrolls internally if it doesn't fit (e.g. smaller laptop screens)</li>
+  </ul>
+</header>
+
+<div class="stage-label">State A — <span>container open</span> (vehicle trunk, Sedan class)</div>
+<div class="stage">
+  <div class="hud-frame">
+
+    <!-- ===== LEFT COLUMN ===== -->
+    <div class="frame-left">
+
+      <!-- block A: appearance, its own card, real gap below it. Carries the
+           character's identity header - this is "who you are", block B below
+           is "what you're carrying". -->
+      <div class="panel">
+        <div class="band block-head">
+          <h2 class="t-display">John Doe</h2>
+          <span class="t-eyebrow">Appearance · 04 / 06</span>
+        </div>
+        <div class="band-underline"></div>
+        <div class="accessories">
+          <div class="acc-slot" data-filled="false" title="Head"><svg><use href="#i-head"/></svg></div>
+          <div class="acc-slot" data-filled="true" title="Mask — Balaclava"><svg><use href="#i-mask"/></svg></div>
+          <div class="acc-slot" data-filled="true" title="Torso — Bomber Jacket"><svg><use href="#i-jacket"/></svg></div>
+          <div class="acc-slot" data-filled="true" title="Armour — Kevlar Vest"><svg><use href="#i-armor"/></svg></div>
+          <div class="acc-slot" data-filled="true" title="Legs — Denim Jeans"><svg><use href="#i-legs"/></svg></div>
+          <div class="acc-slot" data-filled="false" title="Feet"><svg><use href="#i-boots"/></svg></div>
+        </div>
+      </div>
+
+      <!-- block B: categories + search + capacity + grid = one continuous unit -->
+      <div class="panel body-block">
+        <div class="band block-head">
+          <h2 class="t-display">Inventory</h2>
+          <span class="t-eyebrow">On Foot · 50 Slots</span>
+        </div>
+        <div class="band-underline"></div>
+
+        <div class="categories">
+          <button class="cat-btn" data-active="true" title="All"><svg><use href="#i-grid"/></svg></button>
+          <button class="cat-btn" title="Weapons"><svg><use href="#i-pistol"/></svg></button>
+          <button class="cat-btn" title="Clothing"><svg><use href="#i-jacket"/></svg></button>
+          <button class="cat-btn" title="Consumables"><svg><use href="#i-droplet"/></svg></button>
+          <button class="cat-btn" title="Misc"><svg><use href="#i-cube"/></svg></button>
+        </div>
+
+        <div class="search-row">
+          <label class="search-field">
+            <svg><use href="#i-search"/></svg>
+            <input type="text" placeholder="Search inventory" />
+          </label>
+        </div>
+
+        <div class="capacity">
+          <div class="capacity-row">
+            <span class="t-label">Capacity</span>
+            <span class="cap-slots t-num">09 / 50 slots</span>
+            <span class="cap-weight t-num"><b>44.5</b> / 85.0 kg</span>
+          </div>
+          <div class="capacity-track"><span class="capacity-fill" style="width:52%;"></span></div>
+        </div>
+
+        <!-- Pockets: always fully visible, never scrolls -->
+        <div class="grid-band static"><span class="t-label">Pockets</span><span class="band-meta t-num">03 / 08</span></div>
+        <div class="inv-grid">
+          <div class="slot selected"><svg class="slot-ico"><use href="#i-pistol"/></svg><span class="slot-count">1</span><div class="slot-dur"><span style="width:82%;"></span></div></div>
+          <div class="slot"><svg class="slot-ico"><use href="#i-water"/></svg><span class="slot-count">3</span></div>
+          <div class="slot"><svg class="slot-ico"><use href="#i-id"/></svg></div>
+          <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+          <div class="slot empty"></div><div class="slot empty"></div>
+        </div>
+
+        <!-- Backpack: the ONLY part of this card that scrolls, and only if it
+             doesn't fit (e.g. a 14" laptop) - see .col-scroll's flex:1 -->
+        <div class="col-scroll">
+          <div class="grid-band"><span class="t-label">Backpack</span><span class="band-meta t-num">06 / 42</span></div>
+          <div class="inv-grid">
+            <div class="slot"><svg class="slot-ico"><use href="#i-rifle"/></svg><span class="slot-count">1</span><div class="slot-dur"><span class="low" style="width:24%;"></span></div></div>
+            <div class="slot"><svg class="slot-ico"><use href="#i-burger"/></svg><span class="slot-count">1</span></div>
+            <div class="slot"><svg class="slot-ico"><use href="#i-bandage"/></svg><span class="slot-count">5</span></div>
+            <div class="slot"><svg class="slot-ico"><use href="#i-lock"/></svg><span class="slot-count">2</span></div>
+            <div class="slot"><svg class="slot-ico"><use href="#i-phone"/></svg></div>
+            <div class="slot"><svg class="slot-ico"><use href="#i-rope"/></svg><span class="slot-count">1</span></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== CENTRE: deliberately empty, the ped lives here ===== -->
+    <div class="frame-center">
+      <div class="ped-placeholder">
+        <div class="head"></div>
+        <div class="body"></div>
+        <div class="caption">Ped framed here<br>(placeholder for scale)</div>
+      </div>
+    </div>
+
+    <!-- ===== RIGHT COLUMN ===== -->
+    <div class="frame-right">
+      <div class="panel">
+        <div class="band block-head">
+          <h2 class="t-display">Trunk</h2>
+          <span class="t-eyebrow">Sultan RS · Sedan</span>
+        </div>
+        <div class="band-underline"></div>
+        <div class="capacity">
+          <div class="capacity-row">
+            <span class="t-label">Capacity</span>
+            <span class="cap-slots t-num">02 / 41 slots</span>
+            <span class="cap-weight t-num"><b>96.0</b> / 328.0 kg</span>
+          </div>
+          <div class="capacity-track"><span class="capacity-fill" style="width:29%;"></span></div>
+        </div>
+        <div class="col-scroll">
+          <div class="inv-grid pad-top">
+            <div class="slot"><svg class="slot-ico"><use href="#i-ammo"/></svg><span class="slot-count">60</span></div>
+            <div class="slot"><svg class="slot-ico"><use href="#i-wrench"/></svg><span class="slot-count">1</span></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== BOTTOM ACTION BAR ===== -->
+    <div class="frame-bottom panel">
+      <div class="action-bar">
+        <div class="action-item" data-primary="true"><span class="key">E</span><span class="label">Pick Up</span></div>
+        <div class="action-divider"></div>
+        <div class="action-item"><span class="key">F</span><span class="label">Use</span></div>
+        <div class="action-divider"></div>
+        <div class="action-item"><span class="key">G</span><span class="label">Give</span></div>
+        <div class="action-divider"></div>
+        <div class="action-item"><span class="key">H</span><span class="label">Drop</span></div>
+        <div class="action-divider"></div>
+        <div class="action-item"><span class="key">ESC</span><span class="label">Close</span></div>
+        <span class="action-hint">Drag items between columns to move them — <b>unchanged from stock</b></span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- hover tooltip, shown pinned for review -->
+  <div class="panel tooltip-h" style="left:352px; top:336px;">
+    <div class="band tip-head">
+      <span class="t-eyebrow">Weapon · Sidearm</span>
+      <h3 class="t-display">Combat Pistol</h3>
+    </div>
+    <div class="band-underline thin"></div>
+    <div class="tip-body">
+      <div class="tip-art"><svg><use href="#i-pistol"/></svg></div>
+      <dl class="tip-stats">
+        <div><dt>Weight</dt><dd class="t-num">0.80 kg</dd></div>
+        <div><dt>Ammo</dt><dd class="t-num">08 / 12</dd></div>
+        <div><dt>Serial</dt><dd class="t-num">ZRX-4417</dd></div>
+      </dl>
+    </div>
+    <div class="tip-dur">
+      <div class="capacity-row">
+        <span class="t-label">Condition</span>
+        <span class="cap-weight t-num"><b>82</b>%</span>
+      </div>
+      <div class="capacity-track"><span class="capacity-fill" style="width:82%;"></span></div>
+    </div>
+  </div>
+</div>
+
+<div class="stage-label">State B — <span>nothing nearby</span> (ground column collapsed)</div>
+<div class="stage">
+  <div class="hud-frame">
+
+    <div class="frame-left">
+
+      <div class="panel">
+        <div class="band block-head">
+          <h2 class="t-display">John Doe</h2>
+          <span class="t-eyebrow">Appearance · 04 / 06</span>
+        </div>
+        <div class="band-underline"></div>
+        <div class="accessories">
+          <div class="acc-slot" data-filled="false" title="Head"><svg><use href="#i-head"/></svg></div>
+          <div class="acc-slot" data-filled="true" title="Mask — Balaclava"><svg><use href="#i-mask"/></svg></div>
+          <div class="acc-slot" data-filled="true" title="Torso — Bomber Jacket"><svg><use href="#i-jacket"/></svg></div>
+          <div class="acc-slot" data-filled="true" title="Armour — Kevlar Vest"><svg><use href="#i-armor"/></svg></div>
+          <div class="acc-slot" data-filled="true" title="Legs — Denim Jeans"><svg><use href="#i-legs"/></svg></div>
+          <div class="acc-slot" data-filled="false" title="Feet"><svg><use href="#i-boots"/></svg></div>
+        </div>
+      </div>
+
+      <div class="panel body-block">
+        <div class="band block-head">
+          <h2 class="t-display">Inventory</h2>
+          <span class="t-eyebrow">On Foot · 50 Slots</span>
+        </div>
+        <div class="band-underline"></div>
+
+        <div class="categories">
+          <button class="cat-btn" data-active="true" title="All"><svg><use href="#i-grid"/></svg></button>
+          <button class="cat-btn" title="Weapons"><svg><use href="#i-pistol"/></svg></button>
+          <button class="cat-btn" title="Clothing"><svg><use href="#i-jacket"/></svg></button>
+          <button class="cat-btn" title="Consumables"><svg><use href="#i-droplet"/></svg></button>
+          <button class="cat-btn" title="Misc"><svg><use href="#i-cube"/></svg></button>
+        </div>
+
+        <div class="search-row">
+          <label class="search-field">
+            <svg><use href="#i-search"/></svg>
+            <input type="text" placeholder="Search inventory" />
+          </label>
+        </div>
+
+        <div class="capacity">
+          <div class="capacity-row">
+            <span class="t-label">Capacity</span>
+            <span class="cap-slots t-num">09 / 50 slots</span>
+            <span class="cap-weight t-num"><b>44.5</b> / 85.0 kg</span>
+          </div>
+          <div class="capacity-track"><span class="capacity-fill" style="width:52%;"></span></div>
+        </div>
+
+        <div class="grid-band static"><span class="t-label">Pockets</span><span class="band-meta t-num">03 / 08</span></div>
+        <div class="inv-grid">
+          <div class="slot"><svg class="slot-ico"><use href="#i-pistol"/></svg><span class="slot-count">1</span><div class="slot-dur"><span style="width:82%;"></span></div></div>
+          <div class="slot"><svg class="slot-ico"><use href="#i-water"/></svg><span class="slot-count">3</span></div>
+          <div class="slot"><svg class="slot-ico"><use href="#i-id"/></svg></div>
+          <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+          <div class="slot empty"></div><div class="slot empty"></div>
+        </div>
+
+        <div class="col-scroll">
+          <div class="grid-band"><span class="t-label">Backpack</span><span class="band-meta t-num">06 / 42</span></div>
+          <div class="inv-grid">
+            <div class="slot"><svg class="slot-ico"><use href="#i-rifle"/></svg><span class="slot-count">1</span><div class="slot-dur"><span class="low" style="width:24%;"></span></div></div>
+            <div class="slot"><svg class="slot-ico"><use href="#i-burger"/></svg><span class="slot-count">1</span></div>
+            <div class="slot"><svg class="slot-ico"><use href="#i-bandage"/></svg><span class="slot-count">5</span></div>
+            <div class="slot"><svg class="slot-ico"><use href="#i-lock"/></svg><span class="slot-count">2</span></div>
+            <div class="slot"><svg class="slot-ico"><use href="#i-phone"/></svg></div>
+            <div class="slot"><svg class="slot-ico"><use href="#i-rope"/></svg><span class="slot-count">1</span></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+            <div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div><div class="slot empty"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="frame-center">
+      <div class="ped-placeholder">
+        <div class="head"></div>
+        <div class="body"></div>
+        <div class="caption">Ped framed here<br>(placeholder for scale)</div>
+      </div>
+    </div>
+
+    <div class="frame-right">
+      <div class="panel ground-collapsed">
+        <svg><use href="#i-drop"/></svg>
+        <span>Ground · Drag To Drop</span>
+      </div>
+    </div>
+
+    <div class="frame-bottom panel">
+      <div class="action-bar">
+        <div class="action-item" data-primary="true"><span class="key">F</span><span class="label">Use</span></div>
+        <div class="action-divider"></div>
+        <div class="action-item"><span class="key">G</span><span class="label">Give</span></div>
+        <div class="action-divider"></div>
+        <div class="action-item"><span class="key">H</span><span class="label">Drop</span></div>
+        <div class="action-divider"></div>
+        <div class="action-item"><span class="key">ESC</span><span class="label">Close</span></div>
+        <span class="action-hint">Nothing in reach — <b>no container column</b></span>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<section class="notes">
+  <h2>What changed since v4</h2>
+  <div class="notes-grid">
+    <div class="note-card panel">
+      <span class="num">1</span>
+      <h3>Appearance now has a heading</h3>
+      <p>Same label style as "Pockets"/"Backpack" below it - the equipped-items strip no longer floats without a name.</p>
+    </div>
+    <div class="note-card panel">
+      <span class="num">2</span>
+      <h3>Categories moved under Appearance</h3>
+      <p>Both now live in the left column instead of a separate top bar, so the whole "who am I / what am I carrying" story reads top-to-bottom in one place.</p>
+    </div>
+    <div class="note-card panel">
+      <span class="num">3</span>
+      <h3>Search: sticky under categories</h3>
+      <p>Pinned right below the category row, above the scrolling grid - the same placement TabLayout already uses for search fields elsewhere in this project (outside the scroll area, under the tabs).</p>
+    </div>
+    <div class="note-card panel">
+      <span class="num">4</span>
+      <h3>No more top bar</h3>
+      <p>With categories and search relocated, there was nothing left to justify a full-width top bar - removing it gives the ped clear space from the very top of the screen down.</p>
+    </div>
+  </div>
+</section>
+
+</body>
+</html>

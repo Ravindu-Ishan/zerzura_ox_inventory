@@ -1,0 +1,181 @@
+/* ==========================================================================
+   z-inventory design draft v5 — static mockup only.
+   Tokens/patterns copied from ui-theme-guide.md (ZERZURA_QBOX repo root).
+
+   v5 changes vs v4, per feedback:
+   - Top bar removed entirely. Categories moved into the left column,
+     directly under the Appearance strip (which now has its own heading).
+   - Search field placed right under the category row, above the scrolling
+     grid - same "sticky search under tabs" pattern ui-theme-guide.md's
+     TabLayout already uses elsewhere in this project.
+   - Frame is now 3 pieces (left column, right column, bottom bar) instead
+     of 4 - center-clear space now runs from the very top of the screen.
+   ========================================================================== */
+
+:root {
+  --color-ink:          #05070b;
+  --color-panel:        #11151d;
+  --color-raised:       #1b2029;
+  --color-raised-2:     #232936;
+  --color-band:         #272c38;
+  --color-panel-border: rgba(255, 255, 255, 0.09);
+  --color-hairline:     rgba(255, 255, 255, 0.07);
+
+  --color-accent:       #2ee6c8;
+  --color-accent-soft:  rgba(46, 230, 200, 0.14);
+  --color-accent-ink:   #04241f;
+
+  --color-danger:       #ee4036;
+
+  --color-fg:           #eef1f5;
+  --color-muted:        rgba(238, 241, 245, 0.58);
+  --color-faint:        rgba(238, 241, 245, 0.32);
+
+  --font-display: "Barlow Condensed", "Arial Narrow", system-ui, sans-serif;
+  --font-sans:    "Barlow", system-ui, sans-serif;
+
+  --col-width: 320px;
+}
+
+*, *::before, *::after { border-radius: 0; box-sizing: border-box; }
+
+body { margin: 0; font-family: var(--font-sans); color: var(--color-fg); font-feature-settings: "tnum" 1; }
+
+.t-display { font-family: var(--font-display); text-transform: uppercase; font-weight: 700; letter-spacing: 0.005em; line-height: 1; }
+.t-eyebrow { font-family: var(--font-display); text-transform: uppercase; font-weight: 600; font-size: 10.5px; letter-spacing: 0.16em; color: var(--color-faint); }
+.t-label   { font-family: var(--font-display); text-transform: uppercase; font-weight: 600; font-size: 11px; letter-spacing: 0.05em; color: var(--color-muted); }
+.t-num { font-variant-numeric: tabular-nums; }
+
+/* ---- doc chrome ---- */
+.doc-header { background: #05070b; border-bottom: 1px solid var(--color-panel-border); padding: 20px 28px 22px; }
+.doc-header h1 { font-family: var(--font-display); text-transform: uppercase; font-size: 22px; margin: 0 0 6px; }
+.doc-header p { margin: 0; max-width: 900px; font-size: 13.5px; line-height: 1.5; color: var(--color-muted); }
+.doc-tag { display: inline-block; font-family: var(--font-display); text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.12em; color: var(--color-accent-ink); background: var(--color-accent); padding: 3px 8px; margin-bottom: 10px; }
+.changelog { margin: 14px 0 0; padding: 0; list-style: none; display: flex; flex-wrap: wrap; gap: 8px; }
+.changelog li { font-size: 11.5px; color: var(--color-muted); background: rgba(255,255,255,0.06); padding: 4px 9px; border-left: 2px solid var(--color-accent); }
+.stage-label { font-family: var(--font-display); text-transform: uppercase; font-size: 13px; letter-spacing: 0.08em; color: var(--color-muted); padding: 18px 28px 10px; border-top: 1px solid var(--color-panel-border); background: #05070b; }
+.stage-label span { color: var(--color-accent); }
+
+/* ---- stage ---- */
+.stage { position: relative; height: 900px; background: radial-gradient(ellipse 700px 800px at 50% 45%, rgba(60,72,100,0.32), transparent 70%), linear-gradient(135deg, #2b3550 0%, #182135 45%, #0c111c 100%); overflow: hidden; }
+
+.ped-placeholder { display: flex; flex-direction: column; align-items: center; justify-content: center; opacity: 0.9; height: 100%; }
+.ped-placeholder .head { width: 40px; height: 40px; background: rgba(255,255,255,0.14); margin-bottom: 5px; }
+.ped-placeholder .body { width: 90px; height: 240px; background: rgba(255,255,255,0.1); }
+.ped-placeholder .caption { margin-top: 12px; font-family: var(--font-display); text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.08em; color: rgba(255,255,255,0.4); text-align: center; }
+
+/* ---- shared blocks ---- */
+.panel { border: 1px solid var(--color-panel-border); background: rgba(17, 21, 29, 0.93); }
+.band { background: rgba(39, 44, 56, 0.95); }
+.band-underline { height: 4px; background: rgba(255, 255, 255, 0.16); }
+.block-head { display: flex; align-items: center; justify-content: space-between; padding: 8px 11px; }
+.block-head h2 { margin: 0; font-size: 13.5px; }
+
+/* ==========================================================================
+   THE FRAME - now 3 pieces: left column, right column, bottom bar.
+   ========================================================================== */
+
+.hud-frame {
+  position: absolute;
+  inset: 22px;
+  display: grid;
+  grid-template-columns: var(--col-width) 1fr var(--col-width);
+  grid-template-rows: 1fr 46px;
+  gap: 8px;
+}
+
+.frame-left   { grid-column: 1; grid-row: 1; min-height: 0; }
+.frame-center { grid-column: 2; grid-row: 1; display: flex; align-items: center; justify-content: center; }
+.frame-right  { grid-column: 3; grid-row: 1; min-height: 0; }
+.frame-bottom { grid-column: 1 / span 3; grid-row: 2; }
+
+/* ---- left/right full-height columns ---- */
+.frame-left { display: flex; flex-direction: column; min-height: 0; }
+.frame-left > .panel { flex-shrink: 0; }
+.frame-left > .panel.body-block { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+/* Appearance is its own card (real gap below it). Categories now lives INSIDE the
+   body-block card, as its first internal row - it's part of "your inventory"
+   (filter, then search, then results), not a separate concern like Appearance is. */
+.frame-left > .body-block { margin-top: 8px; }
+.frame-right > .panel { height: 100%; display: flex; flex-direction: column; }
+.col-scroll { flex: 1; overflow-y: auto; min-height: 0; }
+.col-scroll::-webkit-scrollbar { width: 6px; }
+.col-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.18); }
+.col-scroll::-webkit-scrollbar-thumb:hover { background: var(--color-accent); }
+
+/* ---- Block 1: Appearance - its own panel, band header + underline, own footprint ---- */
+.section-band { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 11px; }
+.accessories { display: flex; gap: 6px; padding: 9px 11px; flex-wrap: wrap; }
+.acc-slot { position: relative; width: 38px; height: 38px; background: var(--color-raised-2); border: 1px solid var(--color-hairline); display: flex; align-items: center; justify-content: center; color: var(--color-muted); flex-shrink: 0; }
+.acc-slot svg { width: 17px; height: 17px; }
+.acc-slot[data-filled="true"] { border-color: rgba(46,230,200,0.35); color: var(--color-accent); }
+
+/* ---- Block 2: Categories - its own panel, separate from Appearance by a real gap
+   (not a hairline) specifically so two rows of similar square icon tiles don't
+   read as one continuous, confusing section ---- */
+.categories { display: flex; align-items: center; gap: 6px; padding: 9px 11px; border-bottom: 1px solid var(--color-hairline); }
+.cat-btn { width: 28px; height: 28px; border: 1px solid var(--color-hairline); background: rgba(255,255,255,0.03); display: flex; align-items: center; justify-content: center; color: var(--color-muted); cursor: pointer; flex-shrink: 0; }
+.cat-btn svg { width: 14px; height: 14px; }
+.cat-btn[data-active="true"] { border-color: var(--color-accent); color: var(--color-accent); background: rgba(46,230,200,0.08); }
+
+/* ---- Block 3 (body-block): search still sits right under the categories block
+   spatially (separated by the same gap as everything else), then capacity, then
+   the scrolling grid - all inside ONE block since these three are genuinely one
+   continuous "inventory contents" unit, unlike Appearance/Categories. ---- */
+.search-field { position: relative; padding: 8px 11px; flex-shrink: 0; border-bottom: 1px solid var(--color-hairline); }
+.search-field input { width: 100%; height: 30px; padding: 0 10px 0 30px; border: 1px solid var(--color-panel-border); background: rgba(0, 0, 0, 0.35); color: var(--color-fg); font-family: var(--font-sans); font-size: 12.5px; outline: none; }
+.search-field input::placeholder { color: var(--color-faint); }
+.search-field input:focus { border-color: rgba(46, 230, 200, 0.45); background: rgba(0, 0, 0, 0.5); box-shadow: inset 0 -2px 0 0 var(--color-accent); }
+.search-field svg { position: absolute; left: 21px; top: 18px; width: 14px; height: 14px; color: var(--color-faint); pointer-events: none; }
+
+/* ---- capacity (ONE pool, shown once) ---- */
+.capacity { padding: 8px 11px; flex-shrink: 0; }
+.capacity-row { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px; }
+.capacity-track { height: 4px; width: 100%; background: rgba(255, 255, 255, 0.1); }
+.capacity-fill { height: 100%; background: var(--color-accent); }
+
+/* ---- grid section labels within the scroll area (Pockets / Backpack) ---- */
+.grid-band { padding: 7px 11px 5px; }
+
+/* ---- grid ---- */
+.inv-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; padding: 0 8px 8px; }
+.slot { position: relative; aspect-ratio: 1 / 1; background: var(--color-raised-2); border: 1px solid var(--color-hairline); display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.slot.selected { border-color: var(--color-accent); box-shadow: inset 0 0 0 1px var(--color-accent); }
+.slot.empty { background: rgba(35, 41, 54, 0.35); }
+.slot-art { width: 60%; height: 60%; background: var(--color-band); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 9.5px; color: var(--color-muted); text-transform: uppercase; }
+.slot-count { position: absolute; right: 2px; bottom: 1px; font-size: 9px; font-weight: 600; background: rgba(0, 0, 0, 0.6); padding: 0 3px; line-height: 1.4; }
+.slot-durability { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: rgba(255,255,255,0.1); }
+.slot-durability > span { display: block; height: 100%; background: var(--color-accent); }
+.slot-durability > span.low { background: var(--color-danger); }
+
+/* ---- right column collapsed (nothing nearby) ---- */
+.ground-collapsed { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.ground-collapsed span { writing-mode: vertical-rl; transform: rotate(180deg); font-family: var(--font-display); text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.08em; color: var(--color-faint); }
+.ground-collapsed:hover { background: rgba(46, 230, 200, 0.08); }
+.ground-collapsed:hover span { color: var(--color-accent); }
+
+/* ---- bottom bar: full width, keybind badges ---- */
+.action-bar { display: flex; align-items: center; gap: 4px; padding: 0 14px; height: 100%; }
+.action-item { display: flex; align-items: center; gap: 6px; padding: 0 10px; }
+.action-item .key { display: flex; align-items: center; justify-content: center; min-width: 20px; height: 18px; padding: 0 4px; background: rgba(255,255,255,0.12); font-family: var(--font-display); font-size: 10px; font-weight: 700; color: var(--color-fg); }
+.action-item .label { font-family: var(--font-display); text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; color: var(--color-muted); }
+.action-divider { width: 1px; align-self: stretch; background: var(--color-hairline); margin: 10px 0; }
+.action-hint { margin-left: auto; font-size: 11px; color: var(--color-faint); }
+.action-hint b { color: var(--color-muted); }
+
+/* ---- tooltip ---- */
+.tooltip-h { position: absolute; width: 260px; z-index: 5; display: flex; }
+.tooltip-h .art { width: 52px; height: 52px; flex-shrink: 0; background: var(--color-band); display: flex; align-items: center; justify-content: center; font-family: var(--font-display); font-size: 10px; color: var(--color-muted); }
+.tooltip-h .info { padding: 7px 10px; min-width: 0; }
+.tooltip-h .kind { font-size: 9px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--color-faint); }
+.tooltip-h h3 { margin: 1px 0 3px; font-size: 14px; }
+.tooltip-h p { margin: 0; font-size: 10.5px; line-height: 1.35; color: var(--color-muted); }
+
+/* ---- notes ---- */
+.notes { background: #05070b; padding: 26px 28px 40px; border-top: 1px solid var(--color-panel-border); }
+.notes h2 { font-family: var(--font-display); text-transform: uppercase; font-size: 16px; margin: 0 0 14px; }
+.notes-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 12px; }
+.note-card { padding: 14px 16px; }
+.note-card .num { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; background: var(--color-accent); color: var(--color-accent-ink); font-family: var(--font-display); font-weight: 700; font-size: 11px; margin-bottom: 8px; }
+.note-card h3 { margin: 0 0 6px; font-size: 13.5px; text-transform: uppercase; font-family: var(--font-display); letter-spacing: 0.03em; }
+.note-card p { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--color-muted); }
