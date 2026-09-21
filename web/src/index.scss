@@ -650,12 +650,23 @@ svg {
   background-size: 76%;
   image-rendering: -webkit-optimize-contrast;
   border: 1px solid var(--tile-border);
+  --icon-bg: var(--color-raised-2);
   transition:
     border-color 110ms linear,
     background-color 110ms linear;
 
   &:hover {
     border-color: var(--tile-border-hover);
+  }
+
+  /* No real thumbnail for this item (useImageAvailable confirmed the PNG
+     404s) - a category/slot glyph instead of a permanently blank tile. Sized
+     like .acc-slot's own icons so a clothing item's fallback matches the
+     Appearance card glyph it will show once equipped. */
+  .slot-fallback-icon {
+    width: 46%;
+    height: 46%;
+    color: rgba(238, 241, 245, 0.5);
   }
 
   /* empty: recessed, quieter border, one flat 4px marker. Deliberately a

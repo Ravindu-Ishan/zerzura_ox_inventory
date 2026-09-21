@@ -1,19 +1,23 @@
 import React, { useCallback, useRef } from 'react';
 import { AppearanceDragSource, DragSource, Inventory, InventoryType, Slot, SlotWithItem } from '../../typings';
 import { useDrag, useDragDropManager, useDrop } from 'react-dnd';
-import { useAppDispatch } from '../../store';
+import { useAppDispatch, useAppSelector } from '../../store';
 import { onDrop } from '../../dnd/onDrop';
 import { onBuy } from '../../dnd/onBuy';
 import { canCraftItem, canPurchaseItem, getItemUrl, isSlotWithItem } from '../../helpers';
+import { getFallbackIcon } from '../../helpers/itemIcon';
 import { onUse } from '../../dnd/onUse';
 import { unequipSlot } from '../../dnd/onClothing';
 import { Locale } from '../../store/locale';
 import { onCraft } from '../../dnd/onCraft';
 import useNuiEvent from '../../hooks/useNuiEvent';
+import { useImageAvailable } from '../../hooks/useImageAvailable';
 import { ItemsPayload } from '../../reducers/refreshSlots';
 import { closeTooltip, openTooltip } from '../../store/tooltip';
 import { openContextMenu } from '../../store/contextMenu';
+import { selectAppearance } from '../../store/inventory';
 import { useMergeRefs } from '@floating-ui/react';
+import Icon from '../utils/icons/InventoryIcons';
 
 interface SlotProps {
   inventoryId: Inventory['id'];
@@ -156,6 +160,14 @@ const InventorySlot: React.ForwardRefRenderFunction<HTMLDivElement, SlotProps> =
   const unavailable =
     !canPurchaseItem(item, { type: inventoryType, groups: inventoryGroups }) || !canCraftItem(item, inventoryType);
 
+  // CSS background-image has no onError, so a missing web/images/<name>.png
+  // would otherwise just render as an empty square forever. This probes the
+  // same URL separately and swaps to a category/slot icon when it 404s - see
+  // useImageAvailable for why that has to be a real network check, not a guess.
+  const imageUrl = hasItem ? getItemUrl(item as SlotWithItem) : undefined;
+  const imageAvailable = useImageAvailable(imageUrl);
+  const appearance = useAppSelector(selectAppearance);
+
   return (
     <div
       ref={refs}
@@ -166,9 +178,13 @@ const InventorySlot: React.ForwardRefRenderFunction<HTMLDivElement, SlotProps> =
       data-unavailable={unavailable || undefined}
       style={{
         opacity: isDragging ? 0.4 : 1.0,
-        backgroundImage: hasItem ? `url(${getItemUrl(item as SlotWithItem)})` : undefined,
+        backgroundImage: hasItem && imageAvailable ? `url(${imageUrl})` : undefined,
       }}
     >
+      {hasItem && !imageAvailable && (
+        <Icon name={getFallbackIcon(item as SlotWithItem, appearance?.catalog)} className="slot-fallback-icon" />
+      )}
+
       {hasItem && (
         <div
           className="item-slot-wrapper"
