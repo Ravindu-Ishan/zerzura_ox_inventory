@@ -210,9 +210,11 @@ return {
 	},
 
 	--[[
-		Starter clothing catalog - MALE ONLY (mp_m_freemode_01), admin-give /
+		Named clothing catalog - MALE ONLY (mp_m_freemode_01), admin-give /
 		testing only. There is no shop or vendor for these yet; that is separate
-		future work, as is a wardrobe.
+		future work, as is a wardrobe. Nothing here is ever handed out
+		automatically; a character's starting clothes come from character
+		creation and are synced to the generic `clothing` item above instead.
 
 		`consume = 0` so using one never destroys it: wearing it is a move, not a
 		use. modules/clothing/server.lua takes the item out of the inventory when

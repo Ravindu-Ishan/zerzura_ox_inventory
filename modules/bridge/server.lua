@@ -73,13 +73,14 @@ end
 ---This is NOT the same kind of store as the clothing metadata above, and the
 ---difference matters: an in-memory fallback is acceptable for "what am I
 ---wearing" (worst case the player relogs and their hat is in their bag again),
----but it is NOT acceptable for "have I already been given free items". A flag
----that forgets itself on relog is an infinite item duplication exploit.
+---but it is NOT acceptable for "has this already happened once". A flag that
+---forgets itself on relog turns a once-per-character step into a once-per-login
+---one, which for anything that mints an item is a duplication exploit.
 ---
 ---So the contract is deliberately fail-closed: the default returns nil from the
 ---getter and `false` from the setter, meaning "this framework cannot promise
----me anything", and modules/clothing/server.lua refuses to grant rather than
----granting something it cannot record having granted.
+---me anything", and modules/clothing/server.lua declines to do the work rather
+---than doing something it cannot record having done.
 ---@diagnostic disable-next-line: duplicate-set-field
 function server.getPlayerFlag() end
 

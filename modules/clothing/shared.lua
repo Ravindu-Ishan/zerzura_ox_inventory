@@ -54,6 +54,25 @@ Clothing.slots = {
 
 Clothing.byKey = {}
 
+--[[
+	The always-worn slots, DERIVED from the table above rather than listed again.
+
+	These are exactly the slots with `canBeEmpty = false` and `kind =
+	'component'`: torso (11), legs (4) and feet (6). A freemode ped always has
+	SOME drawable there, and straight out of character creation that drawable is
+	backed by no item at all - there is nothing to hand back if the player takes
+	it off, and nothing in the bag to interact with the system.
+
+	That is what the first-load sync in modules/clothing/server.lua fixes, by
+	reading what the ped is ACTUALLY wearing and minting an equipped record for
+	those exact numbers. It does not hand out garments of its own choosing.
+
+	head / mask / armour are absent because they have a genuine "nothing worn"
+	state, so a new character starting with an empty head is correct rather than
+	broken.
+]]
+Clothing.alwaysWorn = {}
+
 local byComponent = {}
 local byProp = {}
 
@@ -62,10 +81,14 @@ for i = 1, #Clothing.slots do
 
 	Clothing.byKey[slot.key] = slot
 	;(slot.kind == 'prop' and byProp or byComponent)[slot.id] = slot
+
+	if slot.kind == 'component' and not slot.canBeEmpty then
+		Clothing.alwaysWorn[#Clothing.alwaysWorn + 1] = slot.key
+	end
 end
 
 --[[
-	Starter catalog - MALE ONLY, deliberately.
+	Named clothing catalog - MALE ONLY, deliberately.
 
 	Every drawable/texture pair below is a value this server (or ox_inventory
 	itself) already uses on mp_m_freemode_01, so none of them are guesses:
@@ -95,6 +118,11 @@ end
 
 	There is no shop or vendor for these; they are admin-give / testing only
 	(`/giveitem <id> clothing_beanie`). A purchase flow is separate future work.
+
+	NOTHING here is ever given out automatically. A character's starting clothes
+	come from character creation, and the inventory syncs itself to those (see
+	Clothing.alwaysWorn above); it does not replace them with items from this
+	list.
 ]]
 Clothing.catalog = {
 	clothing_beanie    = { prop = 0,      drawable = 2,  texture = 1 },
@@ -104,25 +132,6 @@ Clothing.catalog = {
 	clothing_jeans     = { component = 4, drawable = 4,  texture = 1 },
 	clothing_boots     = { component = 6, drawable = 51, texture = 0 },
 }
-
---[[
-	Starter kit - what a brand new character is given, once, ever.
-
-	These are exactly the three slots with `canBeEmpty = false` above: torso
-	(11), legs (4) and feet (6). A freemode ped always has SOME drawable there,
-	and straight out of character creation that drawable is backed by no item at
-	all - there is nothing to hand back if the player ever takes it off, and
-	nothing in the bag to interact with the system. Giving one real garment per
-	always-worn slot fixes both.
-
-	head / mask / armour are deliberately NOT in this list. Those three have a
-	genuine "nothing worn" state, so a new character starting with an empty head
-	is correct rather than broken.
-
-	The grant itself, and the one-time flag that stops a relog repeating it,
-	live in modules/clothing/server.lua.
-]]
-Clothing.starter = { 'clothing_bomber', 'clothing_jeans', 'clothing_boots' }
 
 ---Work out what a given item puts on the ped, and in which slot.
 ---

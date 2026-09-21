@@ -4,10 +4,17 @@ if not lib then return end
 	Client half of item-backed clothing.
 
 	This file never decides that an item was worn or taken off - it asks the
-	server and applies whatever the server confirms. The only thing it is
-	trusted with is reading the ped (to validate a drawable before the server is
-	asked to take the item, and to remember what the ped looked like before a
-	torso/legs/feet garment went on) and pushing pixels afterwards.
+	server and applies whatever the server confirms. What it is trusted with is
+	everything that requires a ped, which the server does not have:
+
+	  * validating a drawable before the server is asked to take the item;
+	  * remembering what the ped looked like before a torso/legs/feet garment
+	    went on;
+	  * reading the ped for the first-load sync of the clothes the character was
+	    created in (see the section near the bottom of this file);
+	  * pushing pixels afterwards, and mirroring the result into
+	    illenium-appearance's stored record so the character creator and the
+	    character-select preview see it too.
 
 	`Equipped` is a read-model, not state: it mirrors the server's records so the
 	Appearance card can print real item labels and know which tiles are
@@ -68,6 +75,11 @@ end
 ---    reading was taken client-side at equip time and has been stored server-
 ---    side with the record ever since, so it survives a relog. `bare` is only
 ---    used if that reading is missing (see shared.lua).
+---
+---A record synced from the clothes the character was created in has no `revert`
+---ON PURPOSE - it is the baseline, so there is no "before" to go back to - and
+---it lands in that last case: taking off the shirt you were created in leaves
+---you bare-chested, which is the only honest answer.
 ---@param data table instruction returned by the unequip callback
 local function revertSlot(data)
 	if data.kind == 'prop' then
@@ -99,6 +111,112 @@ local function isVariationValid(variation)
 	return IsPedComponentVariationValid(cache.ped, variation.id, variation.drawable, variation.texture)
 end
 
+-----------------------------------------------------------------------------------------------
+-- Keeping illenium-appearance's SAVED record honest
+-----------------------------------------------------------------------------------------------
+
+---The appearance illenium-appearance has STORED for this character, which is
+---also the appearance it applies on spawn.
+---@return table? saved
+local function fetchSavedAppearance()
+	if GetResourceState(APPEARANCE_RESOURCE) ~= 'started' then return end
+
+	local ok, saved = pcall(lib.callback.await, 'illenium-appearance:server:getAppearance', false)
+
+	-- Nil means there is no row for this character yet - illenium's
+	-- server/framework/qb/main.lua Framework.GetAppearance returns nothing when
+	-- the lookup misses. An empty component list is treated the same way rather
+	-- than as "matches anything", which is what pedMatches would otherwise
+	-- conclude from it.
+	if not ok or type(saved) ~= 'table' or type(saved.components) ~= 'table' or saved.components[1] == nil then return end
+
+	return saved
+end
+
+--[[
+	Equipping used to change the ped and nothing else, which left two different
+	answers to "what is this character wearing" in the database.
+
+	The bug that exposed it: put a jacket on in game, then go back to the
+	character creator (or look at the character-select screen) and the jacket is
+	not there - but relog and it is on again. Nothing was corrupt; there are
+	simply two stores, and only one of them was being written.
+
+	  * OUR store - equipped records in player metadata. Re-applied on every
+	    spawn by doRestore below, which is why the in-world ped looks right.
+	  * illenium-appearance's store - the playerskins row. This is the one that
+	    every OTHER reader of the character's appearance uses, and none of them
+	    involve the live ped:
+	      - z-player-charcreation's previewSavedCharacter (client/main.lua) ->
+	        qbx_core:server:getPreviewPedData -> storage.fetchPlayerSkin, then
+	        setPedAppearance on the preview ped;
+	      - qbx_core's own character.lua preview, the same way;
+	      - illenium-appearance's InitAppearance on spawn.
+	    Never written by us, so all of them showed pre-equip clothes.
+
+	So after every equip/unequip the changed slot is mirrored into that row.
+
+	It is a SURGICAL PATCH, not a snapshot. The obvious implementation - call
+	getPedAppearance and save the result, which is what illenium's own clothing
+	shop does - is wrong here, because getPedAppearance reads tattoos from
+	illenium's PED_TATTOOS cache (game/util.lua) and head blend / face features
+	/ overlays from the live ped. Any of those being unset or not-yet-applied at
+	the moment we happened to save would be written over the character's real
+	data, permanently. Trading a stale preview for a wiped face is not a fix.
+	Instead the stored record is fetched, the one component or prop entry we
+	actually changed is rewritten, and everything else is passed back through
+	byte for byte.
+
+	The values come from reading the ped back AFTER the change is applied, so
+	what gets stored is what is actually on the character - not what we intended
+	to put there.
+]]
+
+---@param kind 'prop' | 'component'
+---@param id number
+local function persistSlot(kind, id)
+	local saved = fetchSavedAppearance()
+
+	-- No stored row yet (a character mid-creation, whose own save has not landed
+	-- yet). There is nothing to patch, and inventing a whole appearance here is
+	-- exactly the snapshot behaviour the comment above rejects. The creator
+	-- saves the finished character a moment later anyway.
+	if not saved then return end
+
+	local entries, idKey, drawable, texture
+
+	if kind == 'prop' then
+		entries, idKey = saved.props, 'prop_id'
+		drawable, texture = GetPedPropIndex(cache.ped, id), GetPedPropTextureIndex(cache.ped, id)
+	else
+		entries, idKey = saved.components, 'component_id'
+		drawable, texture = GetPedDrawableVariation(cache.ped, id), GetPedTextureVariation(cache.ped, id)
+	end
+
+	if type(entries) ~= 'table' then return end
+
+	local patched = false
+
+	for i = 1, #entries do
+		local entry = entries[i]
+
+		if type(entry) == 'table' and entry[idKey] == id then
+			entry.drawable, entry.texture = drawable, texture
+			patched = true
+			break
+		end
+	end
+
+	-- The stored row genuinely did not list this id (an older save, or a
+	-- different id set). Add it rather than silently dropping the change; the
+	-- shape is identical to what getPedComponents/getPedProps produce.
+	if not patched then
+		entries[#entries + 1] = { [idKey] = id, drawable = drawable, texture = texture }
+	end
+
+	TriggerServerEvent('illenium-appearance:server:saveAppearance', saved)
+end
+
 ---Wear the clothing item in the given inventory slot.
 ---
 ---Called from the `Item('clothing', ...)` handler in modules/items/client.lua,
@@ -118,7 +236,7 @@ function Module.equip(slotId)
 	end
 
 	-- Validated here, before the server is asked for anything: a garment that
-	-- does not exist on this ped model (every value in the starter catalog is
+	-- does not exist on this ped model (every value in the named catalog is
 	-- male-only) must fail with the item still in the bag, not after it has
 	-- been consumed into an invisible nothing.
 	if not isVariationValid(variation) then
@@ -142,6 +260,10 @@ function Module.equip(slotId)
 	Equipped[result.key] = result.record
 	applyRecord(result.record)
 	refreshAppearance()
+
+	-- The ped now shows the garment; make the stored appearance agree, so the
+	-- character creator and the select screen show it too.
+	persistSlot(result.record.kind, result.record.id)
 end
 
 ---Take off whatever is worn in the given slot and put the item back in the bag.
@@ -164,6 +286,10 @@ function Module.unequip(key, targetSlot)
 	Equipped[result.key] = nil
 	revertSlot(result)
 	refreshAppearance()
+
+	-- Same as equip: taking something off is a change to the character's
+	-- appearance, so the stored record has to hear about it as well.
+	persistSlot(result.kind, result.id)
 end
 
 -- Fired by the Appearance card, either from its right-click "Unequip" action or
@@ -212,6 +338,15 @@ local RESTORE_TIMEOUT = 20000
 local SETTLE_PASSES = 6
 local SETTLE_INTERVAL = 500
 
+---How long the first-load clothing sync will wait for a saved appearance to
+---exist AND be observed on the ped. Much longer than RESTORE_TIMEOUT above
+---because on a brand new character it is waiting for the character creator's
+---own save to land, not just for a restore of something already in the
+---database - see waitForSettledAppearance.
+local SYNC_TIMEOUT = 60000
+local SYNC_SAVED_INTERVAL = 1000
+local SYNC_PED_INTERVAL = 200
+
 ---@param saved table appearance as returned by illenium-appearance
 ---@param skip table<number, true> component ids our own records occupy
 ---@return boolean
@@ -240,19 +375,11 @@ local function pedMatches(saved, skip)
 	return true
 end
 
----Block until illenium-appearance has finished putting the base appearance back
----on the ped (or until we give up).
+---Component ids our own records occupy, which must be excluded from any
+---comparison against the saved appearance - we put those there on purpose.
 ---@param records table<string, table>
----@return boolean settled
-local function waitForBaseAppearance(records)
-	if GetResourceState(APPEARANCE_RESOURCE) ~= 'started' then return true end
-
-	local ok, saved = pcall(lib.callback.await, 'illenium-appearance:server:getAppearance', false)
-
-	-- No saved appearance means a brand new character still in creation; there
-	-- is nothing for it to overwrite us with.
-	if not ok or type(saved) ~= 'table' or type(saved.components) ~= 'table' then return true end
-
+---@return table<number, true>
+local function occupiedComponents(records)
 	local skip = {}
 
 	for _, record in pairs(records) do
@@ -261,6 +388,21 @@ local function waitForBaseAppearance(records)
 		end
 	end
 
+	return skip
+end
+
+---Block until illenium-appearance has finished putting the base appearance back
+---on the ped (or until we give up).
+---@param records table<string, table>
+---@return boolean settled
+local function waitForBaseAppearance(records)
+	local saved = fetchSavedAppearance()
+
+	-- No saved appearance means a brand new character still in creation; there
+	-- is nothing for it to overwrite us with.
+	if not saved then return true end
+
+	local skip = occupiedComponents(records)
 	local deadline = GetGameTimer() + RESTORE_TIMEOUT
 
 	repeat
@@ -273,6 +415,110 @@ local function waitForBaseAppearance(records)
 		:format(APPEARANCE_RESOURCE))
 
 	return false
+end
+
+-----------------------------------------------------------------------------------------------
+-- First-load sync of the clothes the character was created in
+-----------------------------------------------------------------------------------------------
+
+--[[
+	The server needs to know the drawable/texture actually on the ped for the
+	three always-worn slots, so it can mint equipped records for exactly those -
+	see the long note in modules/clothing/server.lua for what this replaces and
+	why. This half's whole job is to not read the ped too early.
+
+	The relog wait above is NOT sufficient for a character's first load, and
+	this server's character creation is the reason. Traced through
+	z-player-charcreation/client/main.lua's submitNewCharacter:
+
+	  1. `qbx_core:server:createCharacter` is awaited. That runs qbx_core's
+	     CreatePlayer, which sets the `loadInventory` statebag -> ox_inventory's
+	     setupPlayer -> ox_inventory:setPlayerInventory -> PlayerData.loaded ->
+	     THIS code starts running. The creation UI is still open at this point.
+	  2. destroyPreviewCam() runs, and with it setPreviewUndressed(false) - the
+	     only thing that puts the ped's real clothes back on. Until this line,
+	     the ped may still be wearing the creator's bare-skin UNDRESS_DRAWABLES
+	     (it holds the ped undressed for the whole Tattoos tab).
+	  3. getPedAppearance() is read and `illenium-appearance:server:saveAppearance`
+	     is FIRED AND FORGOTTEN - so the stored row does not exist yet.
+	  4. closeUiAndSpawn spawns the player and fires QBCore:Client:OnPlayerLoaded,
+	     which is what makes illenium-appearance apply the saved appearance.
+
+	So on a first load we start at step 1: there is no saved appearance to
+	compare against (waitForBaseAppearance returns immediately, correctly, for
+	its own purpose) and the ped may be standing there undressed. Reading it
+	then would mint records for bare skin - the same bug z-player-charcreation
+	already has a comment about having fixed once.
+
+	Hence a stricter wait for this one job: proceed only when a stored
+	appearance EXISTS and the ped demonstrably MATCHES it. The undress window
+	cannot satisfy that (the stored appearance has real clothes in it), a
+	pre-save window cannot satisfy it (there is nothing stored yet), and the
+	model is part of the comparison so a gender swap or a fresh ped entity
+	cannot either. If it never becomes true we sync nothing and claim no flag,
+	so the next login simply tries again - a first session with an item-less
+	Appearance card, rather than a permanent record of the wrong clothes.
+]]
+
+---Wait until there is a stored appearance AND the ped agrees with it.
+---@param records table<string, table> our own records, excluded from the match
+---@return table? saved
+local function waitForSettledAppearance(records)
+	if GetResourceState(APPEARANCE_RESOURCE) ~= 'started' then return end
+
+	local skip = occupiedComponents(records)
+	local deadline = GetGameTimer() + SYNC_TIMEOUT
+	local saved
+
+	repeat
+		-- Only polled while still missing: this is a database read on the
+		-- server, so it is not something to hammer once we have an answer.
+		if not saved then saved = fetchSavedAppearance() end
+
+		if saved and pedMatches(saved, skip) then return saved end
+
+		Wait(saved and SYNC_PED_INTERVAL or SYNC_SAVED_INTERVAL)
+	until GetGameTimer() > deadline
+
+	warn('gave up waiting for a settled character appearance; worn clothing was not synced to the inventory')
+end
+
+---Report what the ped is wearing in the given slots and adopt the records the
+---server mints for them.
+---@param keys string[] always-worn slot keys the server says are unsynced
+local function syncCreatedClothing(keys)
+	if not waitForSettledAppearance(Equipped) then return end
+
+	local payload = {}
+
+	for i = 1, #keys do
+		local slot = Clothing.byKey[keys[i]]
+
+		if slot and slot.kind == 'component' then
+			payload[slot.key] = {
+				drawable = GetPedDrawableVariation(cache.ped, slot.id),
+				texture = GetPedTextureVariation(cache.ped, slot.id),
+			}
+		end
+	end
+
+	if not next(payload) then return end
+
+	local ok, records = pcall(lib.callback.await, 'ox_inventory:clothing:syncStarterClothing', false, payload)
+
+	if not ok or type(records) ~= 'table' then return end
+
+	for key, record in pairs(records) do
+		if Clothing.byKey[key] and type(record) == 'table' then
+			Equipped[key] = record
+		end
+	end
+
+	-- Deliberately no persistSlot here. A synced record describes clothing the
+	-- ped is ALREADY wearing, and the values were taken from a ped we had just
+	-- confirmed matches the stored appearance - so there is nothing to write
+	-- back, and writing anyway would only add a database round trip to every
+	-- character's first load.
 end
 
 local restoring = false
@@ -292,14 +538,30 @@ local function doRestore()
 		end
 	end
 
-	if not next(Equipped) then
+	-- Asked every load, answered entirely from server state (the one-time flag
+	-- plus which records exist). nil for every load after the first.
+	local syncOk, pending = pcall(lib.callback.await, 'ox_inventory:clothing:needsStarterSync', false)
+
+	pending = syncOk and type(pending) == 'table' and pending[1] and pending or nil
+
+	if not next(Equipped) and not pending then
 		return refreshAppearance()
 	end
 
-	waitForBaseAppearance(Equipped)
+	if next(Equipped) then
+		waitForBaseAppearance(Equipped)
 
-	for _, record in pairs(Equipped) do
-		applyRecord(record)
+		for _, record in pairs(Equipped) do
+			applyRecord(record)
+		end
+
+		-- Push what we already know before the sync below, which waits on
+		-- something unrelated to these records and can take a few seconds.
+		if pending then refreshAppearance() end
+	end
+
+	if pending then
+		syncCreatedClothing(pending)
 	end
 
 	refreshAppearance()

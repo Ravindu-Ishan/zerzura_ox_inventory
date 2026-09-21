@@ -35,8 +35,6 @@ local Clothing = require 'modules.clothing.shared'
 local Inventory = require 'modules.inventory.server'
 local Items = require 'modules.items.server'
 
-local Module = {}
-
 ---In-memory fallback for frameworks whose bridge cannot persist metadata. The
 ---records still work for the session; they are simply lost on relog.
 local memory = {}
@@ -296,70 +294,291 @@ lib.callback.register('ox_inventory:clothing:getEquipped', function(source)
 end)
 
 -----------------------------------------------------------------------------------------------
--- Starter kit
+-- First-load sync of the clothes the character was created in
 -----------------------------------------------------------------------------------------------
 
 --[[
-	A character's first-ever load gets one real garment for each of the three
-	always-worn slots (see Clothing.starter in shared.lua for why those three).
+	A character comes out of character creation already dressed - the creator
+	picks a torso, legs and feet drawable and illenium-appearance saves them.
+	Those three slots have no "nothing worn" state (see Clothing.alwaysWorn in
+	shared.lua), so the ped is definitely wearing something there, and until now
+	that something was backed by no inventory item: the Appearance card could
+	only say "Worn", and there was nothing to take off.
 
-	This is free item creation, so it is the one place in this module where
-	getting the bookkeeping wrong is a duplication exploit rather than an
-	inconvenience: anything keyed off "is this player loading in" repeats every
-	single relog. The protection is a persistent per-character flag, and the
-	ordering around it is deliberate:
+	This closes that gap by SYNCING, not by granting. On a character's first
+	relevant load the client reads the drawable/texture actually on the ped -
+	once the ped has been observed to match the character's stored appearance,
+	see waitForSettledAppearance in client.lua, which is a stricter wait than
+	the one the spawn restore uses and explains why - and reports them here. The
+	server then mints one equipped record per slot pointing at exactly those
+	numbers. The player keeps the clothes they made; they just now have an item
+	behind them that can be taken off.
 
-	  1. Read the flag. Set -> return immediately, nothing happens.
-	  2. CLAIM the flag, and bail if the framework will not promise to store it
-	     (server.setPlayerFlag returns false). On qbx this also queues the
-	     player row's database write there and then, rather than leaving the
-	     value to the next periodic save.
-	  3. Only then create the items.
+	This deliberately replaces an earlier, wrong approach that handed every new
+	character three fixed catalog garments (a bomber jacket, belted jeans,
+	patrol boots). That put clothes on people they had not chosen and left the
+	ones they had chosen still unbacked, which is why it is gone rather than
+	kept alongside this.
 
-	Claiming before creating is the fail-safe direction, and it is a direction
-	rather than a lock - no framework here offers a transaction across "player
-	metadata" and "inventory contents". What it buys is that the only crash
-	window that exists costs the character their free clothes (annoying, fixable
-	with /giveitem) instead of handing out another set on every subsequent
-	login, forever. The flag write is dispatched immediately while the items are
-	only persisted by ox_inventory's own periodic inventory save, so losing the
-	items but keeping the flag is the likely failure and the reverse effectively
-	cannot happen. Never trade a dupe for a convenience.
+	The backing item is the stock generic `clothing` item, whose appearance
+	lives entirely in its metadata (Clothing.getVariation prefers
+	metadata.component/drawable/texture over the named catalog). That is the
+	only honest option: an arbitrary drawable index out of character creation
+	has no product name, so it gets a generic per-slot label and a metadata
+	payload that reproduces the exact same variation if it is ever put back on.
 
-	Existing characters have no flag, so they are backfilled once on their next
-	login. That is intended - they are in exactly the same position as a new
-	character, wearing clothes no item backs.
+	`revert` is intentionally never set on these records. `revert` means "what
+	the ped looked like before this item went on", and for a synced record there
+	is no before - this IS the baseline. revertSlot in client.lua already falls
+	through a nil `revert` to the slot's `bare` drawable, so taking off the
+	starting shirt leaves the ped bare-chested, which is the correct answer.
+
+	One-time-ness still matters, though not for the old reason. Nothing here is
+	free money, but re-running it after the player took a synced garment off
+	would mint a second one, so it keeps the same persistent flag discipline the
+	grant had:
+
+	  1. Read the flag. Already done for a slot -> that slot is never touched
+	     again.
+	  2. CLAIM the flag, and bail if the framework will not promise to store it.
+	  3. Only then write records.
+
+	The flag is PER SLOT rather than one boolean for the character, because
+	"already has a real item on this slot" and "already synced this slot" are
+	different facts and conflating them loses one of them. The test character
+	that ran the old grant is the case in point: it is wearing a bomber jacket
+	on torso, so torso must be left alone now - but the moment that jacket comes
+	off, the shirt underneath is once again a garment with no item behind it, and
+	it should be synced then. A single boolean set on this pass would have closed
+	that door forever. A slot is marked done only when a record is actually
+	minted for it, so taking a synced garment off can never re-trigger it.
+
+	NOTE the flag key is NEW. The old `starterClothingGranted` flag is already
+	set on any character that loaded under the previous version, and reusing it
+	would skip this sync entirely for exactly the characters that need it most.
+
+	Characters that predate this feature have no flag either, so they are
+	backfilled once on their next login - the same principle the old code had,
+	and the reason it has to work for characters that are not "new".
 ]]
 
-local STARTER_FLAG = 'starterClothingGranted'
+local SYNC_FLAG = 'starterClothingSynced'
 
----@param inv OxInventory
-function Module.grantStarterKit(inv)
-	if not inv?.player then return end
+---The item every synced record is backed by. Metadata-driven, so one item name
+---covers all three slots and any drawable/texture the creator produced.
+local SYNC_ITEM = 'clothing'
 
-	-- Already has them (or already had them and threw them away). Either way,
-	-- this character has been paid out.
-	if server.getPlayerFlag(inv, STARTER_FLAG) then return end
+---Generic, honest labels. We know which slot a garment occupies and nothing
+---else about it - an arbitrary drawable index has no product name, and making
+---one up would put a confident lie in the player's bag.
+local SYNC_LABELS = {
+	torso = 'Shirt',
+	legs = 'Jeans',
+	feet = 'Shoes',
+}
 
-	-- Fail-closed: a framework that cannot store the flag must not be given
-	-- items, because it would be given them again on every relog.
-	if not server.setPlayerFlag(inv, STARTER_FLAG, true) then
-		return warn(('cannot record a starter clothing grant for inventory-%s, so none was made'):format(inv.id))
-	end
+--[[
+	Bounds for the client-reported values.
 
-	for i = 1, #Clothing.starter do
-		local name = Clothing.starter[i]
+	The trust model here is genuinely different from equip/unequip, and worth
+	being explicit about. There is no item to steal or duplicate: the client is
+	not naming an item, a count or a source slot - the item name, the label and
+	the slot are all decided here, and the sync runs at most once per character.
+	The worst a forged payload achieves is one weightless generic `clothing`
+	item whose drawable is a number of the liar's choosing, which they could
+	already have asked an admin for. That is not an economy exploit.
 
-		if not Items(name) then
-			warn(('starter clothing item "%s" does not exist and was skipped'):format(name))
-		else
-			local ok, response = Inventory.AddItem(inv, name, 1)
+	What is worth guarding is garbage propagating into ped state: a negative,
+	fractional or absurd index would be handed to SetPedComponentVariation on
+	re-equip and stored in the character's metadata forever. So the values are
+	required to be non-negative integers inside a range comfortably wider than
+	any real freemode component (torso tops out in the low hundreds with DLC),
+	and anything outside it drops that slot rather than the whole sync.
 
-			if not ok then
-				warn(('failed to give starter clothing "%s" to inventory-%s (%s)'):format(name, inv.id, response))
-			end
-		end
-	end
+	This cannot be a real validity check - IsPedComponentVariationValid is a
+	client native and the server has no ped. The real check already exists
+	client-side at re-equip time (isVariationValid in client.lua refuses to
+	apply an invalid variation with the item still in the bag), and the
+	Appearance card independently cross-checks every record against the live ped
+	before it will name an item, so a fabricated record simply shows as "Worn".
+]]
+local MAX_DRAWABLE = 1023
+local MAX_TEXTURE = 63
+
+---@param value any
+---@param max number
+---@return number?
+local function sanitiseIndex(value, max)
+	if type(value) ~= 'number' then return end
+	if value ~= math.floor(value) then return end
+	if value < 0 or value > max then return end
+
+	return value
 end
 
-return Module
+---Slots this character has already had synced.
+---@param inv OxInventory
+---@return table<string, true>
+local function syncedSlots(inv)
+	local flag = server.getPlayerFlag(inv, SYNC_FLAG)
+
+	if type(flag) == 'table' then return flag end
+
+	-- Anything non-table but truthy is read as "all of them". Nothing writes
+	-- that today; it is here so a coarser value can never be mistaken for
+	-- "nothing has been synced" and re-run the whole thing.
+	if flag then
+		local all = {}
+
+		for i = 1, #Clothing.alwaysWorn do
+			all[Clothing.alwaysWorn[i]] = true
+		end
+
+		return all
+	end
+
+	return {}
+end
+
+---Which always-worn slots this character still needs synced.
+---
+---Recomputed from server state on every call - the flag plus the records that
+---actually exist - so it is the single answer to "is this needed", and the
+---client cannot widen it.
+---@param inv OxInventory
+---@return string[]? keys nil when nothing is pending
+local function pendingSyncSlots(inv)
+	local done = syncedSlots(inv)
+	local records = loadRecords(inv)
+	local pending
+
+	for i = 1, #Clothing.alwaysWorn do
+		local key = Clothing.alwaysWorn[i]
+
+		-- Already synced once, or already wearing a real item here. Either way
+		-- this slot is not ours to touch.
+		if not done[key] and not records[key] then
+			pending = pending or {}
+			pending[#pending + 1] = key
+		end
+	end
+
+	return pending
+end
+
+---Mint equipped records for what the ped is already wearing.
+---
+---Deliberately NOT routed through equip(): equip's job is to move an existing
+---item out of the inventory and onto the ped, and there is no item here to
+---move. This is the opposite direction - clothing that was never an item
+---becoming one - so it shares equip's record shape and persistence and none of
+---its Inventory.RemoveItem/AddItem trade.
+---@param inv OxInventory
+---@param payload table<string, { drawable: number, texture: number }> as reported by the client
+---@return table<string, table>? records the client applies its read-model from
+local function syncStarter(inv, payload)
+	if type(payload) ~= 'table' then return end
+
+	local pending = pendingSyncSlots(inv)
+
+	if not pending then return end
+
+	if not Items(SYNC_ITEM) then
+		return warn(('item "%s" does not exist, so worn clothing cannot be synced for inventory-%s')
+			:format(SYNC_ITEM, inv.id))
+	end
+
+	-- Validate everything BEFORE claiming the flag. A payload with nothing
+	-- usable in it must leave the character unsynced-and-unflagged so the next
+	-- login can try again, rather than burning their one attempt.
+	local usable
+
+	for i = 1, #pending do
+		local key = pending[i]
+		local reported = payload[key]
+		local drawable = type(reported) == 'table' and sanitiseIndex(reported.drawable, MAX_DRAWABLE) or nil
+		local texture = type(reported) == 'table' and sanitiseIndex(reported.texture, MAX_TEXTURE) or nil
+
+		if drawable and texture then
+			usable = usable or {}
+			usable[#usable + 1] = { key = key, drawable = drawable, texture = texture }
+		else
+			warn(('inventory-%s reported no usable %s variation, so that slot was not synced'):format(inv.id, key))
+		end
+	end
+
+	if not usable then return end
+
+	-- Claimed before anything is written, for the same fail-safe reason the old
+	-- grant claimed first: if this half-completes, the character is left as they
+	-- were (clothes with no item behind them) instead of picking up another
+	-- record on every login. Only the slots actually being minted are marked.
+	local done = syncedSlots(inv)
+
+	for i = 1, #usable do
+		done[usable[i].key] = true
+	end
+
+	if not server.setPlayerFlag(inv, SYNC_FLAG, done) then
+		return warn(('cannot record a clothing sync for inventory-%s, so none was made'):format(inv.id))
+	end
+
+	local records = loadRecords(inv)
+	local synced = {}
+
+	for i = 1, #usable do
+		local entry = usable[i]
+		local slotDef = Clothing.byKey[entry.key]
+		local label = SYNC_LABELS[entry.key] or slotDef.key
+
+		local record = {
+			item = SYNC_ITEM,
+			label = label,
+			kind = 'component',
+			id = slotDef.id,
+			drawable = entry.drawable,
+			texture = entry.texture,
+			-- The whole point of using the generic item: these numbers ARE the
+			-- garment. getVariation reads them straight back if the player ever
+			-- takes this off and puts it on again.
+			metadata = {
+				component = slotDef.id,
+				drawable = entry.drawable,
+				texture = entry.texture,
+				label = label,
+				description = 'Part of the outfit this character was created in.',
+			},
+			-- No `revert` on purpose - see the note at the top of this section.
+			-- revertSlot falls back to the slot's bare drawable.
+		}
+
+		records[entry.key] = record
+		synced[entry.key] = record
+	end
+
+	saveRecords(inv, records)
+
+	return synced
+end
+
+---Does this character still need its created-in clothes synced?
+---@return string[]? the always-worn slot keys still missing a record
+lib.callback.register('ox_inventory:clothing:needsStarterSync', function(source)
+	local inv = Inventory(source) --[[@as OxInventory]]
+
+	if not inv?.player then return end
+
+	return pendingSyncSlots(inv)
+end)
+
+---Report what the ped is actually wearing, and get equipped records for it.
+---
+---The client is the only thing that can read a ped, so the drawable/texture
+---pairs have to come from there. Everything else about the resulting records -
+---which slots, which item, which label - is decided server-side, and the values
+---themselves are range-checked above.
+---@param payload table<string, { drawable: number, texture: number }>
+---@return table<string, table>? records
+lib.callback.register('ox_inventory:clothing:syncStarterClothing', function(source, payload)
+	return guarded(source, syncStarter, payload)
+end)

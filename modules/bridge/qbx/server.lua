@@ -11,27 +11,10 @@ AddEventHandler('qbx_core:server:onGroupUpdate', function(source, groupName, gro
     inventory.player.groups[groupName] = not groupGrade and nil or groupGrade
 end)
 
----Lazily required. server.lua loads modules/bridge/server.lua (which loads THIS
----file) before modules/clothing/server.lua, so requiring the clothing module at
----the top of this file would drag it - and the item/inventory modules it pulls
----in - ahead of that order for no reason. By the time setupPlayer runs, the
----whole resource is up.
-local ClothingServer
-
 local function setupPlayer(playerData)
     playerData.identifier = playerData.citizenid
     playerData.name = ('%s %s'):format(playerData.charinfo.firstname, playerData.charinfo.lastname)
     server.setPlayerInventory(playerData)
-
-    -- Starter clothing for a character that has never had it. This runs on
-    -- EVERY load - see modules/clothing/server.lua for the persistent flag that
-    -- makes the grant itself happen exactly once.
-    local inventory = Inventory(playerData.source)
-
-    if inventory then
-        ClothingServer = ClothingServer or require 'modules.clothing.server'
-        ClothingServer.grantStarterKit(inventory)
-    end
 
     local accounts = Inventory.GetAccountItemCounts(playerData.source)
     if not accounts then return end

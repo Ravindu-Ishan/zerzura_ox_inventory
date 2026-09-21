@@ -167,10 +167,12 @@ local function useClothing(data, slot)
 	end)
 end
 
--- The generic stock item, whose drawable/texture/component come from metadata...
+-- The generic stock item, whose drawable/texture/component come from metadata.
+-- This is also what backs the garments a character was created in, synced to
+-- items on first load by modules/clothing/server.lua.
 Item('clothing', useClothing)
 
--- ...and the named starter catalog, whose values come from
+-- ...and the named catalog, whose values come from
 -- modules/clothing/shared.lua so they survive a plain `/giveitem`.
 for name in pairs(Clothing.catalog) do
 	Item(name, useClothing)
