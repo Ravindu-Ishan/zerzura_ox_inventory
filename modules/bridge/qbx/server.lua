@@ -11,10 +11,27 @@ AddEventHandler('qbx_core:server:onGroupUpdate', function(source, groupName, gro
     inventory.player.groups[groupName] = not groupGrade and nil or groupGrade
 end)
 
+---Lazily required. server.lua loads modules/bridge/server.lua (which loads THIS
+---file) before modules/clothing/server.lua, so requiring the clothing module at
+---the top of this file would drag it - and the item/inventory modules it pulls
+---in - ahead of that order for no reason. By the time setupPlayer runs, the
+---whole resource is up.
+local ClothingServer
+
 local function setupPlayer(playerData)
     playerData.identifier = playerData.citizenid
     playerData.name = ('%s %s'):format(playerData.charinfo.firstname, playerData.charinfo.lastname)
     server.setPlayerInventory(playerData)
+
+    -- Starter clothing for a character that has never had it. This runs on
+    -- EVERY load - see modules/clothing/server.lua for the persistent flag that
+    -- makes the grant itself happen exactly once.
+    local inventory = Inventory(playerData.source)
+
+    if inventory then
+        ClothingServer = ClothingServer or require 'modules.clothing.server'
+        ClothingServer.grantStarterKit(inventory)
+    end
 
     local accounts = Inventory.GetAccountItemCounts(playerData.source)
     if not accounts then return end
@@ -114,6 +131,45 @@ function server.setClothingMetadata(inv, value)
 
     player.PlayerData.metadata.equippedClothing = value
     player.Functions.SetMetaData('equippedClothing', value)
+end
+
+---One-time flags, in the same qbx_core player metadata as equippedClothing.
+---
+---Durability is the whole point here (see modules/bridge/server.lua). qbx_core
+---gives us about as much as it has: server/player.lua's SetMetadata ends with
+---`savePlayer(player)` -> `Save(source)`, which queues the players-row upsert
+---immediately rather than leaving the value sitting in memory until the next
+---periodic save.
+---
+---It is queued, not awaited - Save wraps storage.upsertPlayerEntity in a
+---CreateThread - so this is "written within a tick", not "committed before this
+---function returns". That is still the right side of the trade: the flag write
+---is dispatched the moment it is set, whereas the items it guards are only
+---persisted by ox_inventory's own (far slower, periodic) inventory save. A
+---crash cannot therefore keep the items while losing the flag; if anything is
+---lost, the items go first.
+---@param inv OxInventory
+---@param key string
+---@return any
+---@diagnostic disable-next-line: duplicate-set-field
+function server.getPlayerFlag(inv, key)
+    local player = QBX:GetPlayer(inv.id)
+    return player and player.PlayerData.metadata[key]
+end
+
+---@param inv OxInventory
+---@param key string
+---@param value any
+---@return boolean persisted
+---@diagnostic disable-next-line: duplicate-set-field
+function server.setPlayerFlag(inv, key, value)
+    local player = QBX:GetPlayer(inv.id)
+    if not player then return false end
+
+    player.PlayerData.metadata[key] = value
+    player.Functions.SetMetaData(key, value)
+
+    return true
 end
 
 ---@diagnostic disable-next-line: duplicate-set-field

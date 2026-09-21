@@ -105,6 +105,25 @@ Clothing.catalog = {
 	clothing_boots     = { component = 6, drawable = 51, texture = 0 },
 }
 
+--[[
+	Starter kit - what a brand new character is given, once, ever.
+
+	These are exactly the three slots with `canBeEmpty = false` above: torso
+	(11), legs (4) and feet (6). A freemode ped always has SOME drawable there,
+	and straight out of character creation that drawable is backed by no item at
+	all - there is nothing to hand back if the player ever takes it off, and
+	nothing in the bag to interact with the system. Giving one real garment per
+	always-worn slot fixes both.
+
+	head / mask / armour are deliberately NOT in this list. Those three have a
+	genuine "nothing worn" state, so a new character starting with an empty head
+	is correct rather than broken.
+
+	The grant itself, and the one-time flag that stops a relog repeating it,
+	live in modules/clothing/server.lua.
+]]
+Clothing.starter = { 'clothing_bomber', 'clothing_jeans', 'clothing_boots' }
+
 ---Work out what a given item puts on the ped, and in which slot.
 ---
 ---Item metadata wins over the catalog, so the stock generic `clothing` item

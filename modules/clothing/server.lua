@@ -35,6 +35,8 @@ local Clothing = require 'modules.clothing.shared'
 local Inventory = require 'modules.inventory.server'
 local Items = require 'modules.items.server'
 
+local Module = {}
+
 ---In-memory fallback for frameworks whose bridge cannot persist metadata. The
 ---records still work for the session; they are simply lost on relog.
 local memory = {}
@@ -265,3 +267,72 @@ lib.callback.register('ox_inventory:clothing:getEquipped', function(source)
 
 	return loadRecords(inv)
 end)
+
+-----------------------------------------------------------------------------------------------
+-- Starter kit
+-----------------------------------------------------------------------------------------------
+
+--[[
+	A character's first-ever load gets one real garment for each of the three
+	always-worn slots (see Clothing.starter in shared.lua for why those three).
+
+	This is free item creation, so it is the one place in this module where
+	getting the bookkeeping wrong is a duplication exploit rather than an
+	inconvenience: anything keyed off "is this player loading in" repeats every
+	single relog. The protection is a persistent per-character flag, and the
+	ordering around it is deliberate:
+
+	  1. Read the flag. Set -> return immediately, nothing happens.
+	  2. CLAIM the flag, and bail if the framework will not promise to store it
+	     (server.setPlayerFlag returns false). On qbx this also queues the
+	     player row's database write there and then, rather than leaving the
+	     value to the next periodic save.
+	  3. Only then create the items.
+
+	Claiming before creating is the fail-safe direction, and it is a direction
+	rather than a lock - no framework here offers a transaction across "player
+	metadata" and "inventory contents". What it buys is that the only crash
+	window that exists costs the character their free clothes (annoying, fixable
+	with /giveitem) instead of handing out another set on every subsequent
+	login, forever. The flag write is dispatched immediately while the items are
+	only persisted by ox_inventory's own periodic inventory save, so losing the
+	items but keeping the flag is the likely failure and the reverse effectively
+	cannot happen. Never trade a dupe for a convenience.
+
+	Existing characters have no flag, so they are backfilled once on their next
+	login. That is intended - they are in exactly the same position as a new
+	character, wearing clothes no item backs.
+]]
+
+local STARTER_FLAG = 'starterClothingGranted'
+
+---@param inv OxInventory
+function Module.grantStarterKit(inv)
+	if not inv?.player then return end
+
+	-- Already has them (or already had them and threw them away). Either way,
+	-- this character has been paid out.
+	if server.getPlayerFlag(inv, STARTER_FLAG) then return end
+
+	-- Fail-closed: a framework that cannot store the flag must not be given
+	-- items, because it would be given them again on every relog.
+	if not server.setPlayerFlag(inv, STARTER_FLAG, true) then
+		return warn(('cannot record a starter clothing grant for inventory-%s, so none was made'):format(inv.id))
+	end
+
+	for i = 1, #Clothing.starter do
+		local name = Clothing.starter[i]
+
+		if not Items(name) then
+			warn(('starter clothing item "%s" does not exist and was skipped'):format(name))
+		else
+			local ok, response = Inventory.AddItem(inv, name, 1)
+
+			if not ok then
+				warn(('failed to give starter clothing "%s" to inventory-%s (%s)'):format(name, inv.id, response))
+			end
+		end
+	end
+end
+
+return Module

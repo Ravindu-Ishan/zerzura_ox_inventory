@@ -68,6 +68,25 @@ function server.setClothingMetadata()
 	warn('Equipped clothing cannot be saved for the current framework - it will be lost on relog.')
 end
 
+---One-time, persistent per-character flags.
+---
+---This is NOT the same kind of store as the clothing metadata above, and the
+---difference matters: an in-memory fallback is acceptable for "what am I
+---wearing" (worst case the player relogs and their hat is in their bag again),
+---but it is NOT acceptable for "have I already been given free items". A flag
+---that forgets itself on relog is an infinite item duplication exploit.
+---
+---So the contract is deliberately fail-closed: the default returns nil from the
+---getter and `false` from the setter, meaning "this framework cannot promise
+---me anything", and modules/clothing/server.lua refuses to grant rather than
+---granting something it cannot record having granted.
+---@diagnostic disable-next-line: duplicate-set-field
+function server.getPlayerFlag() end
+
+---@return boolean persisted false if the flag could not be stored durably
+---@diagnostic disable-next-line: duplicate-set-field
+function server.setPlayerFlag() return false end
+
 local Inventory = require 'modules.inventory.server'
 
 function server.playerDropped(source)
