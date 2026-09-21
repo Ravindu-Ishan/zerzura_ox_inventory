@@ -7,6 +7,7 @@ import { openAppearanceContextMenu } from '../../store/contextMenu';
 import { closeTooltip } from '../../store/tooltip';
 import { equipFromSlot } from '../../dnd/onClothing';
 import { getItemUrl } from '../../helpers';
+import { resolveClothingSlot } from '../../helpers/itemIcon';
 import type { Appearance, AppearanceDragSource, AppearanceSlot, AppearanceSlotKey, DragSource } from '../../typings';
 
 /**
@@ -43,10 +44,24 @@ import type { Appearance, AppearanceDragSource, AppearanceSlot, AppearanceSlotKe
  * asked for. Taking something off now needs intent:
  *
  *  - EQUIP:   drag the item from the grid onto its tile. Accepted only when the
- *             catalog says that item belongs on that tile; a mismatched garment
- *             is not a valid drop target at all, so the drag simply will not
- *             land. This fires the same `useItem` message as right-click ->
- *             Use, which is still there and still works.
+ *             item actually belongs on that tile; a mismatched garment is not a
+ *             valid drop target at all, so the drag simply will not land. This
+ *             fires the same `useItem` message as right-click -> Use, which is
+ *             still there and still works.
+ *
+ *             "Belongs on that tile" is resolved by resolveClothingSlot, which
+ *             mirrors Clothing.getVariation's precedence: the item's own
+ *             metadata first, then the name-keyed catalog. BOTH halves are
+ *             load-bearing and the metadata half is the one that matters in
+ *             practice. This tile used to consult the catalog alone, which was
+ *             true when a new character was handed three NAMED catalog garments
+ *             (db93cb22) and became wrong the moment that grant was replaced by
+ *             syncing the character's own clothes onto the generic `clothing`
+ *             item (58addf66) - that item is deliberately absent from the
+ *             catalog, so drag-to-equip silently stopped working for the only
+ *             clothing items a real character actually owns. The browser dev
+ *             fixture still had a named `clothing_jeans` in the bag, so it kept
+ *             exercising the one case that never broke.
  *  - UNEQUIP: right-click the tile -> "Unequip", or drag the tile onto an
  *             inventory square. Both end in the same `unequipClothing`
  *             callback; the drag just names a preferred destination square.
@@ -105,7 +120,11 @@ const AppearanceTile: React.FC<{ slot: AppearanceSlot; catalog: Appearance['cata
       // Only a garment that actually belongs on THIS tile, and only out of the
       // player's own inventory - you cannot dress yourself straight out of a
       // trunk or a shop any more than you could before.
-      canDrop: (source) => source.inventory === 'player' && catalog?.[source.item.name] === slot.key,
+      //
+      // resolveClothingSlot reads the dragged item's metadata first and the
+      // catalog second, exactly as Clothing.getVariation does; see the note at
+      // the top of this file for why the metadata half is not optional.
+      canDrop: (source) => source.inventory === 'player' && resolveClothingSlot(source.item, catalog) === slot.key,
       drop: (source) => {
         dispatch(closeTooltip());
         equipFromSlot(source.item.slot);

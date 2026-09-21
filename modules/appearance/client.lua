@@ -50,10 +50,19 @@ local SLOTS = Clothing.slots
 	through the normal use -> ox_inventory:useItem -> clothing:equip path, where
 	getVariation is consulted again on both the client and the server.
 
-	The stock generic `clothing` item is absent by design: its slot comes from
-	per-instance metadata, not its name, so there is nothing to put in a
-	name-keyed map. That item is still equippable the way it always was, by
-	right-click -> Use; it simply cannot be drag-equipped.
+	The stock generic `clothing` item is absent because it CANNOT be here: its
+	slot comes from per-instance metadata, not its name, so there is nothing to
+	put in a name-keyed map.
+
+	That is a real limit of this table rather than a limit of the feature, and
+	the NUI is where the two are reconciled - resolveClothingSlot
+	(web/src/helpers/itemIcon.ts) reads the dragged item's own metadata first and
+	consults this map second, the same precedence Clothing.getVariation uses
+	here. It matters more than it looks: the always-worn slots on every real
+	character are backed by the generic item (see the first-load sync in
+	modules/clothing/server.lua), so a drop target built on this map alone
+	refuses every garment a normal player actually owns while still accepting the
+	admin-give named ones.
 ]]
 local CATALOG = {}
 
@@ -64,6 +73,74 @@ for name in pairs(Clothing.catalog) do
 		CATALOG[name] = variation.key
 	end
 end
+
+--[[
+	Diagnostics for the CATALOG, deliberately left in.
+
+	This table is the one part of the Appearance payload that has no
+	browser-testable equivalent: web/src/App.tsx's debugData hardcodes a catalog
+	in TypeScript, so a dev-server test proves the CARD can read one and proves
+	nothing whatsoever about what this file builds and serialises. Drag-to-equip
+	has already been reported broken in game after passing exactly that kind of
+	test, so the payload now says what it contains out loud.
+
+	Both a count and the encoded form are printed. The encoding is the
+	interesting half: an empty Lua table serialises as `[]`, not `{}`, and an
+	array-shaped catalog would make every drag invalid while looking fine in a
+	`print` of the table itself.
+]]
+local function describeCatalog()
+	local count = 0
+
+	for _ in pairs(CATALOG) do count = count + 1 end
+
+	local ok, encoded = pcall(json.encode, CATALOG)
+
+	return count, ok and encoded or ('<not encodable: %s>'):format(encoded)
+end
+
+do
+	local count, encoded = describeCatalog()
+	local expected = 0
+
+	for _ in pairs(Clothing.catalog) do expected = expected + 1 end
+
+	print(('[clothing] appearance catalog resolved %d of %d named items: %s'):format(count, expected, encoded))
+
+	if count ~= expected then
+		warn(('%d named clothing items did not resolve to an Appearance slot and cannot be drag-equipped')
+			:format(expected - count))
+	end
+end
+
+---Whether the NUI has been told about the catalog yet, so the first payload can
+---be logged in full without every later refresh repeating it.
+local loggedPayload = false
+
+--[[
+	What the NUI says it actually received.
+
+	The NUI's own console is not reliably visible from the client console, and
+	"the Lua sent it" is not the same claim as "the card can use it" - the
+	payload crosses a JSON boundary and a redux reducer on the way. So the card
+	reports back once, and that report is printed here, in the F8 console,
+	next to what this file thinks it sent.
+
+	Data only: nothing here decides anything, it just prints.
+]]
+RegisterNUICallback('clothingDebug', function(data, cb)
+	cb(1)
+
+	if type(data) ~= 'table' then return end
+
+	print(('[clothing] NUI reports: available=%s slots=%s catalogEntries=%s catalogIsArray=%s keys=%s'):format(
+		tostring(data.available), tostring(data.slots), tostring(data.catalogEntries),
+		tostring(data.catalogIsArray), type(data.catalogKeys) == 'table' and table.concat(data.catalogKeys, ',') or 'none'))
+
+	if data.catalogEntries == 0 then
+		warn('the inventory UI received an EMPTY clothing catalog - named garments cannot be drag-equipped in this state')
+	end
+end)
 
 local warned = false
 
@@ -182,6 +259,17 @@ function Appearance.refresh()
 		action = 'setAppearance',
 		data = { available = true, slots = slots, catalog = CATALOG }
 	})
+
+	-- Once per session: the exact catalog that went over the wire, so the F8
+	-- console can be compared against what the card reports receiving
+	-- (RegisterNUICallback('clothingDebug') above).
+	if not loggedPayload then
+		loggedPayload = true
+
+		local count, encoded = describeCatalog()
+
+		print(('[clothing] sent setAppearance with %d slots and a %d-entry catalog: %s'):format(#slots, count, encoded))
+	end
 end
 
 return Appearance

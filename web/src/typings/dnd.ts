@@ -3,7 +3,20 @@ import { Inventory } from './inventory';
 import { Slot, SlotWithItem } from './slot';
 
 export type DragSource = {
-  item: Pick<SlotWithItem, 'slot' | 'name'>;
+  /**
+   * `metadata` rides along purely so a drop target can ask what the item IS
+   * without reaching back into the store. It is the only per-instance answer to
+   * "which Appearance tile does this garment belong on" for the generic
+   * `clothing` item, whose slot lives in metadata rather than in its name (see
+   * resolveClothingSlot in helpers/itemIcon.ts and Clothing.getVariation in
+   * modules/clothing/shared.lua).
+   *
+   * Nothing authoritative reads it: onDrop/onBuy/onCraft still resolve the real
+   * slot out of redux by `item.slot` and ignore everything else on the source,
+   * and equipping still goes through useItem -> the Lua validation path, which
+   * consults getVariation again on both the client and the server.
+   */
+  item: Pick<SlotWithItem, 'slot' | 'name'> & Partial<Pick<SlotWithItem, 'metadata'>>;
   inventory: Inventory['type'];
   image?: string;
 };

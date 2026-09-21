@@ -47,12 +47,38 @@ const SLOT_ICON: Record<AppearanceSlotKey, InventoryIconName> = {
   feet: 'boots',
 };
 
-/** Resolve a clothing item down to a specific Appearance slot, if we can. */
-const resolveClothingSlot = (item: SlotWithItem, catalog?: Appearance['catalog']): AppearanceSlotKey | undefined => {
-  const metadata = item.metadata as { component?: number; prop?: number } | undefined;
+/**
+ * Resolve a clothing item down to a specific Appearance slot, if we can.
+ *
+ * The precedence and the conditions are Clothing.getVariation's, deliberately:
+ * per-instance metadata wins over the name-keyed catalog, and the metadata
+ * branch is only taken when it carries a COMPLETE variation - a numeric
+ * component/prop AND a numeric drawable AND a numeric texture. Lua requires all
+ * three before it will look at metadata at all
+ * (modules/clothing/shared.lua), so anything less has to fall through to the
+ * catalog here too or the two sides disagree about the same item.
+ *
+ * Used for two things now, and it must stay one function for both: picking a
+ * fallback icon, and deciding whether a dragged item may be dropped on an
+ * Appearance tile (see AppearanceCard). The second one is the reason the
+ * metadata branch matters - the generic `clothing` item has no catalog entry,
+ * and it is what every real character's starter garments are made of.
+ *
+ * Only `name` and `metadata` are read, so a drag source carrying just those two
+ * is enough.
+ */
+export const resolveClothingSlot = (
+  item: Pick<SlotWithItem, 'name' | 'metadata'>,
+  catalog?: Appearance['catalog']
+): AppearanceSlotKey | undefined => {
+  const metadata = item.metadata as
+    | { component?: number; prop?: number; drawable?: number; texture?: number }
+    | undefined;
 
-  if (typeof metadata?.component === 'number') return COMPONENT_SLOT[metadata.component];
-  if (typeof metadata?.prop === 'number') return PROP_SLOT[metadata.prop];
+  if (typeof metadata?.drawable === 'number' && typeof metadata?.texture === 'number') {
+    if (typeof metadata.prop === 'number') return PROP_SLOT[metadata.prop];
+    if (typeof metadata.component === 'number') return COMPONENT_SLOT[metadata.component];
+  }
 
   return catalog?.[item.name];
 };

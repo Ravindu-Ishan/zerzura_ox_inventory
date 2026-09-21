@@ -39,13 +39,17 @@ export type Appearance = {
   slots: AppearanceSlot[];
   /**
    * Item name -> the tile it belongs on, resolved by Clothing.getVariation in
-   * modules/appearance/client.lua. The card uses it (and only it) to decide
-   * whether a dragged inventory item may be dropped on a given tile; it is not
-   * a second source of truth, just that function's answer shipped over.
+   * modules/appearance/client.lua. It is not a second source of truth, just
+   * that function's answer for the NAMED catalog shipped over.
    *
-   * The stock generic `clothing` item is absent: its slot lives in per-instance
-   * metadata rather than its name, so it cannot be keyed here. It is still
-   * equippable by right-click -> Use, just not by dragging.
+   * The stock generic `clothing` item is absent, and cannot be here: its slot
+   * lives in per-instance metadata rather than its name, so there is nothing to
+   * key it by. That is why this is not on its own enough to answer "may this
+   * item be dropped on this tile" - resolveClothingSlot
+   * (helpers/itemIcon.ts) checks the dragged item's own metadata first and
+   * falls back to this map, which is the same order Clothing.getVariation uses.
+   * A generic `clothing` item IS drag-equippable via that metadata; it simply
+   * cannot be recognised by name.
    */
   catalog?: Partial<Record<string, AppearanceSlotKey>>;
 };

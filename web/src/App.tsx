@@ -51,6 +51,26 @@ debugData([
           // drag-onto-the-Legs-tile equip path (and prove the other five tiles
           // refuse it).
           { slot: 7, name: 'clothing_jeans', weight: 700, count: 1 },
+          // ...and the generic metadata-driven `clothing` item, which is what
+          // the always-worn slots are ACTUALLY backed by in game (the starter
+          // sync in modules/clothing/server.lua mints this, not a named
+          // garment). It has no catalog entry, so it is the case the Appearance
+          // card resolves from metadata instead. This fixture previously held
+          // only the named item above, which is how drag-to-equip could look
+          // fine here and refuse every real garment in game - do not remove it.
+          {
+            slot: 8,
+            name: 'clothing',
+            weight: 0,
+            count: 1,
+            metadata: {
+              component: 11,
+              drawable: 3,
+              texture: 0,
+              label: 'Shirt',
+              description: 'Part of the outfit this character was created in.',
+            },
+          },
           {
             slot: 6,
             name: 'backwoods',

@@ -51,6 +51,11 @@ const InventorySlot: React.ForwardRefRenderFunction<HTMLDivElement, SlotProps> =
               item: {
                 name: item.name,
                 slot: item.slot,
+                // Carried so an Appearance tile can tell whether this garment
+                // belongs on it. A generic `clothing` item is not in the
+                // name-keyed catalog - its slot is in here - and that item is
+                // what every character's starter garments are made of.
+                metadata: item.metadata,
               },
               image: item?.name && `url(${getItemUrl(item) || 'none'}`,
             }
