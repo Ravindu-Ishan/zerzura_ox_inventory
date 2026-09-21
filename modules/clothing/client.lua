@@ -65,6 +65,50 @@ local function isApplied(record)
 		and GetPedTextureVariation(cache.ped, record.id) == record.texture
 end
 
+---@param variation table
+---@return boolean valid
+local function isVariationValid(variation)
+	if variation.kind == 'prop' then
+		return SetPedPreloadPropData(cache.ped, variation.id, variation.drawable, variation.texture)
+	end
+
+	return IsPedComponentVariationValid(cache.ped, variation.id, variation.drawable, variation.texture)
+end
+
+--[[
+	Components that decide what a BARE component 11 actually looks like, logged
+	alongside a torso revert and read-only here.
+
+	Component 11 (tops) is not the whole upper body: 3 is the torso/arms mesh and
+	8 is the undershirt. illenium-appearance's own strip-the-ped routine writes
+	all three together (constants.DATA_CLOTHES, copied verbatim into
+	z-player-charcreation's UNDRESS_DRAWABLES: male 3 = 15, 8 = 15, 11 = 252), so
+	a "bare torso" that only writes 11 leaves whatever 3 and 8 happened to be.
+	We do NOT own those two slots - there is no equipped record and no `revert`
+	reading for them, so writing them here would be a change we cannot undo - but
+	their values are the difference between "the shirt came off correctly and you
+	are seeing the undershirt" and "the ped is broken", which is exactly what the
+	owner's report is ambiguous about. So they are printed, not touched.
+]]
+local TORSO_NEIGHBOURS = { 3, 8 }
+
+---Log the components around a torso revert, so the F8 console can tell a
+---correct bare-chest result apart from a broken ped.
+---@param id number the component that was just reverted
+local function logNeighbours(id)
+	if id ~= 11 then return end
+
+	for i = 1, #TORSO_NEIGHBOURS do
+		local neighbour = TORSO_NEIGHBOURS[i]
+
+		print(('[clothing] unequip torso: neighbour component %d is drawable %d texture %d (of %d variations)'):format(
+			neighbour,
+			GetPedDrawableVariation(cache.ped, neighbour),
+			GetPedTextureVariation(cache.ped, neighbour),
+			GetNumberOfPedDrawableVariations(cache.ped, neighbour)))
+	end
+end
+
 ---Put the slot back to whatever "not wearing our item" means for it.
 ---
 ---  * head   - ClearPedProp. A real engine-level absence.
@@ -80,35 +124,118 @@ end
 ---ON PURPOSE - it is the baseline, so there is no "before" to go back to - and
 ---it lands in that last case: taking off the shirt you were created in leaves
 ---you bare-chested, which is the only honest answer.
+---
+---NOTHING IS APPLIED UNVALIDATED HERE. Module.equip has always checked
+---isVariationValid before asking the server for anything, precisely so a value
+---this ped cannot wear fails with the item still in the bag instead of being
+---painted on. The revert path had no equivalent and applied `revert` / `bare` /
+---`emptyValue` straight to SetPedComponentVariation, which is a real hole rather
+---than a theoretical one: `bare` for torso is drawable 252, and that drawable
+---only exists while the DLC that ships it is streaming. z-player-charcreation
+---(main server repo) hit exactly this and documents it on its own
+---UNDRESS_DRAWABLES table - "male torso2 252 in particular only exists if the
+---DLC that ships it is streaming" - having traced a "character has no body" bug
+---to it. So each fallback is validated, they are tried in order of how much we
+---trust them, and if none of them is valid the ped is LEFT ALONE: still wearing
+---a garment that is now back in the bag is a cosmetic lie that the next
+---equip/relog corrects, whereas a rejected drawable is the broken ped itself.
+---
+---The prints are deliberate and are meant to stay. This whole path is
+---in-game-only (there is no ped in a browser and no IsPedComponentVariationValid
+---outside the client), it has already produced one report that reads as two
+---different bugs, and the same read-back-and-print pattern is what finally
+---pinned down the undress bug in z-player-charcreation.
 ---@param data table instruction returned by the unequip callback
 local function revertSlot(data)
 	if data.kind == 'prop' then
+		print(('[clothing] unequip %s: clearing prop %d'):format(data.key, data.id))
+
 		return ClearPedProp(cache.ped, data.id)
 	end
 
-	local drawable, texture
+	-- Ordered by trust, which is the same order the old if/elseif had - the only
+	-- difference is that a rejected candidate now falls through to the next one
+	-- instead of ending the attempt.
+	local candidates = {}
 
 	if data.revert then
-		drawable, texture = data.revert.drawable, data.revert.texture
-	elseif data.canBeEmpty then
-		drawable, texture = data.emptyValue, 0
+		candidates[#candidates + 1] = {
+			source = 'revert',
+			drawable = data.revert.drawable,
+			texture = data.revert.texture,
+		}
+	end
+
+	if data.canBeEmpty then
+		candidates[#candidates + 1] = { source = 'emptyValue', drawable = data.emptyValue, texture = 0 }
 	else
-		drawable, texture = data.bare, 0
+		candidates[#candidates + 1] = { source = 'bare', drawable = data.bare, texture = 0 }
 	end
 
-	if type(drawable) ~= 'number' then return end
+	local worn = GetPedDrawableVariation(cache.ped, data.id)
+	local wornTexture = GetPedTextureVariation(cache.ped, data.id)
+	local variations = GetNumberOfPedDrawableVariations(cache.ped, data.id)
 
-	SetPedComponentVariation(cache.ped, data.id, drawable, texture or 0, 0)
-end
+	-- Records written by earlier versions of this feature (and the in-memory
+	-- fallback for frameworks that cannot persist metadata) are not re-sanitised
+	-- on load, so a stored `revert` is not guaranteed to hold two integers. A
+	-- non-integer reaching the `%d` in the log below would throw before it ever
+	-- reached the ped, which is a silly way to break an unequip.
+	---@param value any
+	---@return number?
+	local function index(value)
+		if type(value) ~= 'number' then return end
+		if value ~= math.floor(value) then return end
 
----@param variation table
----@return boolean valid
-local function isVariationValid(variation)
-	if variation.kind == 'prop' then
-		return SetPedPreloadPropData(cache.ped, variation.id, variation.drawable, variation.texture)
+		return value
 	end
 
-	return IsPedComponentVariationValid(cache.ped, variation.id, variation.drawable, variation.texture)
+	for i = 1, #candidates do
+		local candidate = candidates[i]
+		local drawable = index(candidate.drawable)
+		local texture = index(candidate.texture) or 0
+
+		if drawable then
+			local valid = isVariationValid({
+				kind = 'component',
+				id = data.id,
+				drawable = drawable,
+				texture = texture,
+			})
+
+			print(('[clothing] unequip %s: %s -> component %d drawable %d texture %d | valid=%s | currently %d/%d | %d variations exist')
+				:format(data.key, candidate.source, data.id, drawable, texture, tostring(valid), worn, wornTexture,
+					variations))
+
+			if valid then
+				SetPedComponentVariation(cache.ped, data.id, drawable, texture, 0)
+
+				-- Read back instead of trusting the write, the same way
+				-- z-player-charcreation's undress routine does: an out-of-range
+				-- drawable is rejected silently, so "I called the native" is not
+				-- evidence that anything changed.
+				local got = GetPedDrawableVariation(cache.ped, data.id)
+				local gotTexture = GetPedTextureVariation(cache.ped, data.id)
+
+				if got ~= drawable or gotTexture ~= texture then
+					warn(('unequip %s: asked component %d for drawable %d texture %d but the ped reports %d/%d - the value did not take')
+						:format(data.key, data.id, drawable, texture, got, gotTexture))
+				else
+					print(('[clothing] unequip %s: component %d is now %d/%d'):format(data.key, data.id, got, gotTexture))
+				end
+
+				return logNeighbours(data.id)
+			end
+
+			warn(('unequip %s: %s drawable %d texture %d is not valid on this ped (component %d has %d variations), so it was not applied')
+				:format(data.key, candidate.source, drawable, texture, data.id, variations))
+		end
+	end
+
+	warn(('unequip %s: no valid value to revert component %d to, so the ped was left as it is - it will still show the garment until something else changes that component')
+		:format(data.key, data.id))
+
+	logNeighbours(data.id)
 end
 
 -----------------------------------------------------------------------------------------------

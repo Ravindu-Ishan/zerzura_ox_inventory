@@ -43,6 +43,27 @@ local Clothing = {}
 ---qbx_radialmenu/client/clothing.lua: Extras.Shirt male = 252 (bare torso),
 ---Extras.Pants male = 61 (bare legs), drawables.Shoes male = 34 (barefoot).
 ---They are MALE values - see the female note on CATALOG below.
+---
+---NOT ONE OF THEM IS GUARANTEED TO EXIST ON A GIVEN CLIENT, and torso 252 in
+---particular is known not to. The same number appears in
+---z-player-charcreation's UNDRESS_DRAWABLES (main server repo,
+---client/main.lua), sourced from illenium-appearance's own
+---constants.DATA_CLOTHES, and that table carries a comment written after the
+---resource was debugged in game: "male torso2 252 in particular only exists if
+---the DLC that ships it is streaming", and separately that one of those bare
+---drawables "is DLC-dependent and can silently fail to apply on a different
+---client than the one that created the character". That is the documented cause
+---of a "character has no body" bug over there.
+---
+---The numbers are kept - they came from a verified source and they are right on
+---a client that has the DLC - but they are no longer applied on faith.
+---revertSlot in modules/clothing/client.lua now runs every fallback through
+---IsPedComponentVariationValid first (the same check Module.equip has always
+---done), falls through to the next candidate if one is rejected, and leaves the
+---ped untouched rather than writing a value the engine will not honour. Do not
+---"fix" a torso problem by swapping this number for a different guess; the
+---validation and the F8 logging in revertSlot are there to say what the ped
+---actually accepted.
 Clothing.slots = {
 	{ key = 'head',   kind = 'prop',      id = 0,  canBeEmpty = true,  emptyValue = -1 },
 	{ key = 'mask',   kind = 'component', id = 1,  canBeEmpty = true,  emptyValue = 0 },
