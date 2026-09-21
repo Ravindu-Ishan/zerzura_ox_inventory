@@ -1,6 +1,6 @@
 import React, { useEffect, useLayoutEffect, useRef } from 'react';
 import { useDragLayer, useDragDropManager } from 'react-dnd';
-import { DragSource } from '../../typings';
+import { AppearanceDragSource, DragSource } from '../../typings';
 
 const DragPreview: React.FC = () => {
   const manager = useDragDropManager();
@@ -9,7 +9,7 @@ const DragPreview: React.FC = () => {
   // Only collect item/isDragging here, so we re-render on drag start/end rather than
   // on every pointer move.
   const { data, isDragging } = useDragLayer((monitor) => ({
-    data: monitor.getItem() as DragSource | null,
+    data: monitor.getItem() as DragSource | AppearanceDragSource | null,
     isDragging: monitor.isDragging(),
   }));
 
@@ -34,7 +34,11 @@ const DragPreview: React.FC = () => {
     return monitor.subscribeToOffsetChange(apply);
   }, [isDragging, manager]);
 
-  if (!isDragging || !data?.item) return null;
+  // Keyed off the image rather than off `item`, so a garment dragged off the
+  // Appearance card (which has a key, not an inventory slot) previews too. For
+  // a grid drag this is the same condition as before: a 'SLOT' source with no
+  // name never becomes a drag in the first place.
+  if (!isDragging || !data?.image) return null;
 
   return <div className="item-drag-preview" ref={rootRef} style={{ backgroundImage: data.image }} />;
 };

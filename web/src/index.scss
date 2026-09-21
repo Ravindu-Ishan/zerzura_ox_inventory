@@ -369,14 +369,33 @@ svg {
   }
 
   /* Only tiles backed by a real inventory item can be taken off, so only those
-     advertise themselves as pressable. Everything else keeps the existing
-     styling untouched - this adds an affordance, it does not restyle the card. */
+     advertise themselves as grabbable. A plain click does nothing on purpose -
+     unequipping is right-click -> Unequip or a drag out of the card - so the
+     cursor says "drag me", not "press me". */
   &[data-clickable='true'] {
-    cursor: pointer;
+    cursor: grab;
 
     &:hover,
     &:focus-visible {
       border-color: var(--color-accent);
+    }
+  }
+
+  /* A garment is being dragged over this tile and it fits here. Same accent +
+     corner marker language as a grid slot under the cursor (guide 5.3), so the
+     two drop targets read as one system. */
+  &[data-over] {
+    border-color: var(--color-accent);
+    background-color: #264048;
+
+    &::before {
+      content: '';
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 5px;
+      height: 5px;
+      background: var(--color-accent);
     }
   }
 }

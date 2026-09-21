@@ -53,9 +53,14 @@ export const inventorySlice = createSlice({
     setAppearance: (state, action: PayloadAction<Appearance | undefined>) => {
       // Lua serialises an empty table as `{}` (object, not array), so normalise
       // rather than trusting the payload shape.
+      const catalog = action.payload?.catalog;
+
       state.appearance = {
         available: !!action.payload?.available,
         slots: Array.isArray(action.payload?.slots) ? action.payload!.slots : [],
+        // Same normalisation reason: Lua sends an empty catalog as `[]`, not
+        // `{}`, and an array here would silently make every drag invalid.
+        catalog: catalog && !Array.isArray(catalog) ? catalog : {},
       };
     },
     setItemAmount: (state, action: PayloadAction<number>) => {

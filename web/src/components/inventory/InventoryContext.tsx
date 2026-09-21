@@ -1,6 +1,7 @@
 import { onUse } from '../../dnd/onUse';
 import { onGive } from '../../dnd/onGive';
 import { onDrop } from '../../dnd/onDrop';
+import { unequipSlot } from '../../dnd/onClothing';
 import { Items } from '../../store/items';
 import { fetchNui } from '../../utils/fetchNui';
 import { Locale } from '../../store/locale';
@@ -38,6 +39,7 @@ interface GroupedButtons extends Array<Group> {}
 const InventoryContext: React.FC = () => {
   const contextMenu = useAppSelector((state) => state.contextMenu);
   const item = contextMenu.item;
+  const appearance = contextMenu.appearance;
 
   const handleClick = (data: DataProps) => {
     if (!item) return;
@@ -88,6 +90,23 @@ const InventoryContext: React.FC = () => {
       return groups;
     }, []);
   };
+
+  // An Appearance tile rather than an inventory square. The two subjects are
+  // mutually exclusive in the store, so this is a clean early return: a worn
+  // garment has exactly one action, and none of the item actions below (use,
+  // give, drop, attachments) mean anything for something that is not in the
+  // bag. Unequipping is the same `unequipClothing` callback a drag out of the
+  // card fires - this one just names no destination square.
+  if (appearance) {
+    return (
+      <Menu>
+        <MenuItem
+          onClick={() => unequipSlot(appearance.key)}
+          label={`${Locale.ui_unequip || 'Unequip'}${appearance.label ? ` ${appearance.label}` : ''}`}
+        />
+      </Menu>
+    );
+  }
 
   return (
     <>

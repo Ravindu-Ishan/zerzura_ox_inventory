@@ -146,10 +146,18 @@ end
 
 ---Take off whatever is worn in the given slot and put the item back in the bag.
 ---@param key string one of Clothing.byKey
-function Module.unequip(key)
+---@param targetSlot number? preferred inventory slot for the returned item
+function Module.unequip(key, targetSlot)
 	if not Clothing.byKey[key] or not Equipped[key] then return end
 
-	local result = lib.callback.await('ox_inventory:clothing:unequip', false, key)
+	-- Only the key and the destination preference ever cross to the server, and
+	-- the server range-checks the latter and treats it as a hint. There is no
+	-- item name, count or metadata in this payload for the same reason there
+	-- never was: nothing the client says may decide what gets created.
+	local result = lib.callback.await('ox_inventory:clothing:unequip', false, {
+		key = key,
+		slot = type(targetSlot) == 'number' and targetSlot or nil,
+	})
 
 	if not result then return end
 
@@ -158,8 +166,11 @@ function Module.unequip(key)
 	refreshAppearance()
 end
 
--- Fired by the Appearance card when a tile holding a real equipped item is
--- clicked. cb() first so CEF is not left waiting on the server round trip.
+-- Fired by the Appearance card, either from its right-click "Unequip" action or
+-- from dragging the tile onto an inventory square (which supplies `slot`, the
+-- square that was dropped on). Both are the same call - the drag is an input
+-- method, not a second code path. cb() first so CEF is not left waiting on the
+-- server round trip.
 RegisterNUICallback('unequipClothing', function(data, cb)
 	cb(1)
 
@@ -167,7 +178,7 @@ RegisterNUICallback('unequipClothing', function(data, cb)
 
 	if type(key) ~= 'string' then return end
 
-	Module.unequip(key)
+	Module.unequip(key, type(data) == 'table' and tonumber(data.slot) or nil)
 end)
 
 -----------------------------------------------------------------------------------------------

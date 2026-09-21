@@ -175,10 +175,31 @@ local function equip(inv, payload)
 	return { key = variation.key, record = record }
 end
 
+---A preferred destination slot, as sent by a drag of the equipped tile onto a
+---specific inventory square. Purely cosmetic - Inventory.AddItem falls back to
+---its own search when the slot is taken - but it MUST be range-checked here.
+---AddItem will happily write to `inv.items[slot]` for any slot number it finds
+---empty, including one past `inv.slots`, which would park the item in a square
+---the player can never see or reach.
 ---@param inv OxInventory
----@param key string
-local function unequip(inv, key)
+---@param value any
+---@return number?
+local function sanitiseTargetSlot(inv, value)
+	if type(value) ~= 'number' then return end
+	if value ~= math.floor(value) then return end
+	if value < 1 or value > inv.slots then return end
+
+	return value
+end
+
+---@param inv OxInventory
+---@param payload string | { key: string, slot: number? } slot key, or the key plus a preferred destination slot
+local function unequip(inv, payload)
+	local key = type(payload) == 'table' and payload.key or payload
+
 	if type(key) ~= 'string' then return end
+
+	local targetSlot = type(payload) == 'table' and sanitiseTargetSlot(inv, payload.slot) or nil
 
 	local slotDef = Clothing.byKey[key]
 
@@ -214,7 +235,7 @@ local function unequip(inv, key)
 		return
 	end
 
-	if not Inventory.AddItem(inv, record.item, 1, record.metadata) then
+	if not Inventory.AddItem(inv, record.item, 1, record.metadata, targetSlot) then
 		notify(inv.id, ('You have no room to carry your %s.'):format(record.label or record.item))
 		return
 	end
@@ -254,9 +275,15 @@ lib.callback.register('ox_inventory:clothing:equip', function(source, payload)
 end)
 
 ---Take it off the ped and put the same item back in the bag.
+---
+---`payload` is either the bare slot key (right-click -> Unequip, which has no
+---opinion about where the item lands) or `{ key = ..., slot = ... }` when the
+---tile was dragged onto a specific inventory square. The slot is a preference,
+---not an instruction: it is range-checked above and then handed to AddItem,
+---which ignores it if that square is occupied.
 ---@return table? instruction telling the client what to revert this slot to
-lib.callback.register('ox_inventory:clothing:unequip', function(source, key)
-	return guarded(source, unequip, key)
+lib.callback.register('ox_inventory:clothing:unequip', function(source, payload)
+	return guarded(source, unequip, payload)
 end)
 
 ---Re-apply on spawn / after an ox_inventory restart.

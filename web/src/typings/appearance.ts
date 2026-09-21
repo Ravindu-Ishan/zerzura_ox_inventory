@@ -29,7 +29,7 @@ export type AppearanceSlot = {
   item?: string;
   /** That item's label, as resolved server-side when it was equipped. */
   label?: string;
-  /** True when clicking the tile will return the item to the inventory. */
+  /** True when there is a real item behind this tile to hand back. */
   unequippable?: boolean;
 };
 
@@ -37,4 +37,15 @@ export type Appearance = {
   /** false when illenium-appearance could not be read; slots is then empty. */
   available: boolean;
   slots: AppearanceSlot[];
+  /**
+   * Item name -> the tile it belongs on, resolved by Clothing.getVariation in
+   * modules/appearance/client.lua. The card uses it (and only it) to decide
+   * whether a dragged inventory item may be dropped on a given tile; it is not
+   * a second source of truth, just that function's answer shipped over.
+   *
+   * The stock generic `clothing` item is absent: its slot lives in per-instance
+   * metadata rather than its name, so it cannot be keyed here. It is still
+   * equippable by right-click -> Use, just not by dragging.
+   */
+  catalog?: Partial<Record<string, AppearanceSlotKey>>;
 };

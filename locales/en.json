@@ -3,6 +3,7 @@
   "ui_give": "Give",
   "ui_close": "Close",
   "ui_drop": "Drop",
+  "ui_unequip": "Unequip",
   "ui_removeattachments": "Remove attachments",
   "ui_copy": "Copy serial number",
   "ui_durability": "Durability",

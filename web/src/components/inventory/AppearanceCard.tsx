@@ -1,9 +1,13 @@
 import React from 'react';
+import { useDrag, useDrop } from 'react-dnd';
 import { Icon, InventoryIconName } from '../utils/icons/InventoryIcons';
-import { useAppSelector } from '../../store';
+import { useAppDispatch, useAppSelector } from '../../store';
 import { selectAppearance } from '../../store/inventory';
-import { fetchNui } from '../../utils/fetchNui';
-import type { AppearanceSlot, AppearanceSlotKey } from '../../typings';
+import { openAppearanceContextMenu } from '../../store/contextMenu';
+import { closeTooltip } from '../../store/tooltip';
+import { equipFromSlot } from '../../dnd/onClothing';
+import { getItemUrl } from '../../helpers';
+import type { Appearance, AppearanceDragSource, AppearanceSlot, AppearanceSlotKey, DragSource } from '../../typings';
 
 /**
  * ---------------------------------------------------------------------------
@@ -16,21 +20,36 @@ import type { AppearanceSlot, AppearanceSlotKey } from '../../typings';
  *     getPedAppearance export) - so worn/not-worn is honest no matter what put
  *     the clothes there.
  *  2. The equipped-item records the inventory owns server-side - so a slot the
- *     INVENTORY filled also carries the real item name, and can be clicked to
- *     take it off and put the item back in the bag.
+ *     INVENTORY filled also carries the real item name, and can be taken off to
+ *     put that item back in the bag.
  *
  * The distinction matters and is preserved rather than smoothed over:
  *
- *  - A slot with `unequippable` shows the item's label and is a button. Clicking
- *    it asks the server to return that item; the server can refuse (no room),
- *    in which case nothing changes and the player is notified in game.
+ *  - A slot with `unequippable` shows the item's label and is interactive.
  *  - A slot that is `filled` with no item was dressed by character creation, an
  *    admin command or qbx_radialmenu's separate clothing toggle. There is no
- *    item to give back, so it stays "Worn" and is not clickable.
+ *    item to give back, so it stays "Worn" and is inert.
  *  - Torso / Legs / Feet still have no empty state (canBeEmpty: false): a
  *    freemode ped always resolves to some drawable on components 11, 4 and 6.
  *    Taking our garment off there restores the drawable the ped had immediately
  *    before it went on, not a made-up "bare" constant.
+ *
+ * ---------------------------------------------------------------------------
+ * Interaction: three deliberate gestures, no bare clicks.
+ * ---------------------------------------------------------------------------
+ * A plain left-click used to unequip. It does not any more, and should not be
+ * reinstated: this card sits next to the grid, and a stray click that silently
+ * strips a garment (and can fail on a full bag) is not something the player
+ * asked for. Taking something off now needs intent:
+ *
+ *  - EQUIP:   drag the item from the grid onto its tile. Accepted only when the
+ *             catalog says that item belongs on that tile; a mismatched garment
+ *             is not a valid drop target at all, so the drag simply will not
+ *             land. This fires the same `useItem` message as right-click ->
+ *             Use, which is still there and still works.
+ *  - UNEQUIP: right-click the tile -> "Unequip", or drag the tile onto an
+ *             inventory square. Both end in the same `unequipClothing`
+ *             callback; the drag just names a preferred destination square.
  *
  * If the client never sends the event, or illenium-appearance is missing, the
  * card renders an explicit "unknown" state instead of pretending the ped is
@@ -51,20 +70,92 @@ const SLOT_ORDER: AppearanceSlotKey[] = ['head', 'mask', 'torso', 'armour', 'leg
 const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
 
 const describe = (slot: AppearanceSlot, label: string) => {
-  if (!slot.filled) return `${label} · Empty`;
+  if (!slot.filled) return `${label} · Empty — drag a garment here to wear it`;
 
   const variation =
     slot.drawable !== undefined && slot.texture !== undefined
       ? ` (${slot.kind} ${slot.id}, drawable ${slot.drawable}, texture ${slot.texture})`
       : '';
 
-  // A real item behind the slot: name it, and say the click does something.
-  if (slot.unequippable) return `${slot.label ?? slot.item} · Click to take off${variation}`;
+  // A real item behind the slot: name it, and say what takes it off.
+  if (slot.unequippable) return `${slot.label ?? slot.item} · Right-click to unequip, or drag it out${variation}`;
 
   // Honest about the three slots that can never report empty.
   const caveat = slot.canBeEmpty ? '' : ' — this slot has no "nothing worn" state';
 
   return `${label} · Worn${variation}${caveat}`;
+};
+
+/**
+ * One tile.
+ *
+ * Its own component purely because it needs hooks (useDrag / useDrop) and those
+ * cannot live inside a .map() callback.
+ */
+const AppearanceTile: React.FC<{ slot: AppearanceSlot; catalog: Appearance['catalog'] }> = ({ slot, catalog }) => {
+  const dispatch = useAppDispatch();
+  const meta = SLOT_META[slot.key];
+  const interactive = !!slot.unequippable;
+
+  // --- drop target: equip -------------------------------------------------
+  const [{ isOver }, drop] = useDrop<DragSource, void, { isOver: boolean }>(
+    () => ({
+      accept: 'SLOT',
+      collect: (monitor) => ({ isOver: monitor.isOver() && monitor.canDrop() }),
+      // Only a garment that actually belongs on THIS tile, and only out of the
+      // player's own inventory - you cannot dress yourself straight out of a
+      // trunk or a shop any more than you could before.
+      canDrop: (source) => source.inventory === 'player' && catalog?.[source.item.name] === slot.key,
+      drop: (source) => {
+        dispatch(closeTooltip());
+        equipFromSlot(source.item.slot);
+      },
+    }),
+    [slot.key, catalog, dispatch]
+  );
+
+  // --- drag source: unequip ----------------------------------------------
+  const [{ isDragging }, drag] = useDrag<AppearanceDragSource, void, { isDragging: boolean }>(
+    () => ({
+      type: 'APPEARANCE',
+      collect: (monitor) => ({ isDragging: monitor.isDragging() }),
+      canDrag: () => interactive,
+      item: () =>
+        slot.item
+          ? {
+              key: slot.key,
+              name: slot.item,
+              image: `url(${getItemUrl(slot.item) || 'none'})`,
+            }
+          : null,
+    }),
+    [slot.key, slot.item, interactive]
+  );
+
+  const handleContext = (event: React.MouseEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    if (!interactive) return;
+
+    dispatch(openAppearanceContextMenu({ slot, coords: { x: event.clientX, y: event.clientY } }));
+  };
+
+  return (
+    <div
+      ref={(element) => {
+        drag(drop(element));
+      }}
+      className="acc-slot"
+      data-filled={slot.filled}
+      data-clickable={interactive}
+      data-over={isOver || undefined}
+      style={{ opacity: isDragging ? 0.4 : 1.0 }}
+      title={describe(slot, meta.label)}
+      onContextMenu={handleContext}
+    >
+      <Icon name={meta.icon} />
+      {slot.label && <span className="acc-slot-label">{slot.label}</span>}
+    </div>
+  );
 };
 
 const AppearanceCard: React.FC<{ characterName: string }> = ({ characterName }) => {
@@ -75,15 +166,6 @@ const AppearanceCard: React.FC<{ characterName: string }> = ({ characterName }) 
   const slots = (appearance?.available ? appearance.slots : []).filter((slot) => SLOT_META[slot.key]);
   const hasData = slots.length > 0;
   const equipped = slots.filter((slot) => slot.filled).length;
-
-  const unequip = (slot: AppearanceSlot) => {
-    if (!slot.unequippable) return;
-
-    // Fire and forget: the client applies the revert only once the server has
-    // confirmed the item is back in the inventory, and pushes a fresh
-    // setAppearance either way. Nothing is optimistically mutated here.
-    fetchNui('unequipClothing', { key: slot.key });
-  };
 
   return (
     <div className="panel appearance-card">
@@ -96,36 +178,7 @@ const AppearanceCard: React.FC<{ characterName: string }> = ({ characterName }) 
       <div className="band-underline" />
       <div className="accessories">
         {hasData
-          ? slots.map((slot) => {
-              const meta = SLOT_META[slot.key];
-              const clickable = !!slot.unequippable;
-
-              return (
-                <div
-                  key={slot.key}
-                  className="acc-slot"
-                  data-filled={slot.filled}
-                  data-clickable={clickable}
-                  title={describe(slot, meta.label)}
-                  role={clickable ? 'button' : undefined}
-                  tabIndex={clickable ? 0 : undefined}
-                  onClick={clickable ? () => unequip(slot) : undefined}
-                  onKeyDown={
-                    clickable
-                      ? (event) => {
-                          if (event.key === 'Enter' || event.key === ' ') {
-                            event.preventDefault();
-                            unequip(slot);
-                          }
-                        }
-                      : undefined
-                  }
-                >
-                  <Icon name={meta.icon} />
-                  {slot.label && <span className="acc-slot-label">{slot.label}</span>}
-                </div>
-              );
-            })
+          ? slots.map((slot) => <AppearanceTile key={slot.key} slot={slot} catalog={appearance?.catalog} />)
           : SLOT_ORDER.map((key) => (
               <div
                 key={key}

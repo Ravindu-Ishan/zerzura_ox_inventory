@@ -1,11 +1,12 @@
 import React, { useCallback, useRef } from 'react';
-import { DragSource, Inventory, InventoryType, Slot, SlotWithItem } from '../../typings';
+import { AppearanceDragSource, DragSource, Inventory, InventoryType, Slot, SlotWithItem } from '../../typings';
 import { useDrag, useDragDropManager, useDrop } from 'react-dnd';
 import { useAppDispatch } from '../../store';
 import { onDrop } from '../../dnd/onDrop';
 import { onBuy } from '../../dnd/onBuy';
 import { canCraftItem, canPurchaseItem, getItemUrl, isSlotWithItem } from '../../helpers';
 import { onUse } from '../../dnd/onUse';
+import { unequipSlot } from '../../dnd/onClothing';
 import { Locale } from '../../store/locale';
 import { onCraft } from '../../dnd/onCraft';
 import useNuiEvent from '../../hooks/useNuiEvent';
@@ -55,30 +56,61 @@ const InventorySlot: React.ForwardRefRenderFunction<HTMLDivElement, SlotProps> =
     [inventoryType, item]
   );
 
-  const [{ isOver }, drop] = useDrop<DragSource, void, { isOver: boolean }>(
+  /**
+   * Two kinds of drag can land on a square.
+   *
+   * 'SLOT' is stock: another inventory square, resolved by onDrop/onBuy/onCraft.
+   *
+   * 'APPEARANCE' is a worn garment being dragged off the Appearance card. It is
+   * routed to the same `unequipClothing` callback the card's right-click menu
+   * uses - this square is passed along as the preferred landing spot, which is
+   * why it is handled per-slot here rather than as one big "anywhere in the
+   * grid" target. It is only ever valid over an empty square of the player's
+   * OWN inventory: the server puts the item back in the player's bag, so
+   * offering a trunk or a stash square would be a lie.
+   */
+  const [{ isOver }, drop] = useDrop<DragSource | AppearanceDragSource, void, { isOver: boolean }>(
     () => ({
-      accept: 'SLOT',
+      accept: ['SLOT', 'APPEARANCE'],
       collect: (monitor) => ({
-        isOver: monitor.isOver(),
+        // canDrop is folded in so a square that would refuse the drag does not
+        // light up as if it would take it.
+        isOver: monitor.isOver() && monitor.canDrop(),
       }),
-      drop: (source) => {
+      drop: (source, monitor) => {
         dispatch(closeTooltip());
-        switch (source.inventory) {
+
+        if (monitor.getItemType() === 'APPEARANCE') {
+          return unequipSlot((source as AppearanceDragSource).key, item.slot);
+        }
+
+        const dragged = source as DragSource;
+
+        switch (dragged.inventory) {
           case InventoryType.SHOP:
-            onBuy(source, { inventory: inventoryType, item: { slot: item.slot } });
+            onBuy(dragged, { inventory: inventoryType, item: { slot: item.slot } });
             break;
           case InventoryType.CRAFTING:
-            onCraft(source, { inventory: inventoryType, item: { slot: item.slot } });
+            onCraft(dragged, { inventory: inventoryType, item: { slot: item.slot } });
             break;
           default:
-            onDrop(source, { inventory: inventoryType, item: { slot: item.slot } });
+            onDrop(dragged, { inventory: inventoryType, item: { slot: item.slot } });
             break;
         }
       },
-      canDrop: (source) =>
-        (source.item.slot !== item.slot || source.inventory !== inventoryType) &&
-        inventoryType !== InventoryType.SHOP &&
-        inventoryType !== InventoryType.CRAFTING,
+      canDrop: (source, monitor) => {
+        if (monitor.getItemType() === 'APPEARANCE') {
+          return inventoryType === InventoryType.PLAYER && !isSlotWithItem(item);
+        }
+
+        const dragged = source as DragSource;
+
+        return (
+          (dragged.item.slot !== item.slot || dragged.inventory !== inventoryType) &&
+          inventoryType !== InventoryType.SHOP &&
+          inventoryType !== InventoryType.CRAFTING
+        );
+      },
     }),
     [inventoryType, item]
   );

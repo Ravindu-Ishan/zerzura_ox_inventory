@@ -38,6 +38,33 @@ local APPEARANCE_RESOURCE = 'illenium-appearance'
 ---why only head/mask/armour have a trustworthy "nothing worn" signal.
 local SLOTS = Clothing.slots
 
+--[[
+	Which named clothing item belongs to which tile, resolved ONCE here and sent
+	to the NUI with every payload.
+
+	The card needs this to decide whether a dragged inventory item may be
+	dropped on a given tile. That question is already answered authoritatively
+	by Clothing.getVariation, and this is that same function's answer - not a
+	second implementation of it in TypeScript. The NUI only ever uses it to
+	decide what to highlight and what to refuse locally; equipping still goes
+	through the normal use -> ox_inventory:useItem -> clothing:equip path, where
+	getVariation is consulted again on both the client and the server.
+
+	The stock generic `clothing` item is absent by design: its slot comes from
+	per-instance metadata, not its name, so there is nothing to put in a
+	name-keyed map. That item is still equippable the way it always was, by
+	right-click -> Use; it simply cannot be drag-equipped.
+]]
+local CATALOG = {}
+
+for name in pairs(Clothing.catalog) do
+	local variation = Clothing.getVariation(name)
+
+	if variation then
+		CATALOG[name] = variation.key
+	end
+end
+
 local warned = false
 
 ---@return table? appearance illenium-appearance's getPedAppearance result
@@ -153,7 +180,7 @@ function Appearance.refresh()
 
 	SendNUIMessage({
 		action = 'setAppearance',
-		data = { available = true, slots = slots }
+		data = { available = true, slots = slots, catalog = CATALOG }
 	})
 end
 

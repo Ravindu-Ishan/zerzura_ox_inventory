@@ -47,6 +47,10 @@ debugData([
             metadata: { description: 'Generic item description' },
           },
           { slot: 5, name: 'water', weight: 100, count: 1 },
+          // A catalog garment, so the browser dev build can exercise the
+          // drag-onto-the-Legs-tile equip path (and prove the other five tiles
+          // refuse it).
+          { slot: 7, name: 'clothing_jeans', weight: 700, count: 1 },
           {
             slot: 6,
             name: 'backwoods',
@@ -113,6 +117,16 @@ debugData([
         { key: 'legs', kind: 'component', id: 4, drawable: 4, texture: 1, filled: true, canBeEmpty: false },
         { key: 'feet', kind: 'component', id: 6, drawable: 7, texture: 0, filled: true, canBeEmpty: false },
       ],
+      // Built in Lua from Clothing.catalog via Clothing.getVariation; the card
+      // uses it to decide which tile a dragged item may be dropped on.
+      catalog: {
+        clothing_beanie: 'head',
+        clothing_balaclava: 'mask',
+        clothing_bomber: 'torso',
+        clothing_vest: 'armour',
+        clothing_jeans: 'legs',
+        clothing_boots: 'feet',
+      },
     },
   },
 ]);
