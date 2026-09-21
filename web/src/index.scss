@@ -367,6 +367,38 @@ svg {
   &:hover {
     border-color: var(--tile-border-hover);
   }
+
+  /* Only tiles backed by a real inventory item can be taken off, so only those
+     advertise themselves as pressable. Everything else keeps the existing
+     styling untouched - this adds an affordance, it does not restyle the card. */
+  &[data-clickable='true'] {
+    cursor: pointer;
+
+    &:hover,
+    &:focus-visible {
+      border-color: var(--color-accent);
+    }
+  }
+}
+
+/* The item's real label, under the glyph. Clipped rather than wrapped: the tile
+   is a fixed square on a 6-column track, and a wrapping label would push the
+   Appearance card's height around as the player changes clothes. The full name
+   is always in the tile's title tooltip. */
+.acc-slot-label {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  bottom: 2px;
+  font-size: 8px;
+  line-height: 1.1;
+  text-align: center;
+  letter-spacing: 0.02em;
+  color: rgba(238, 241, 245, 0.55);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
 }
 
 /* ==========================================================================

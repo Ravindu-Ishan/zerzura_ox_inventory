@@ -2,36 +2,35 @@ import React from 'react';
 import { Icon, InventoryIconName } from '../utils/icons/InventoryIcons';
 import { useAppSelector } from '../../store';
 import { selectAppearance } from '../../store/inventory';
+import { fetchNui } from '../../utils/fetchNui';
 import type { AppearanceSlot, AppearanceSlotKey } from '../../typings';
 
 /**
  * ---------------------------------------------------------------------------
- * Real data now - but still a PARTIAL feature. Read this before "fixing" it.
+ * Item-backed. Read this before "fixing" it.
  * ---------------------------------------------------------------------------
- * This card is driven by the `setAppearance` NUI event from
- * modules/appearance/client.lua, which reads the ped's live component/prop
- * variations (via illenium-appearance's getPedAppearance export) on inventory
- * open and after every clothing item use. So the worn/not-worn state below is
- * the real ped, regardless of whether the clothes came from an inventory item,
- * character creation, an admin command or another script.
+ * Driven by the `setAppearance` NUI event from modules/appearance/client.lua,
+ * which combines two sources:
  *
- * What it still CANNOT do, and why:
+ *  1. The ped's live component/prop variations (via illenium-appearance's
+ *     getPedAppearance export) - so worn/not-worn is honest no matter what put
+ *     the clothes there.
+ *  2. The equipped-item records the inventory owns server-side - so a slot the
+ *     INVENTORY filled also carries the real item name, and can be clicked to
+ *     take it off and put the item back in the bag.
  *
- *  1. No item labels. The client only learns numbers - "component 11, drawable
- *     12, texture 2". Nothing on the client maps a drawable/texture pair back
- *     to the inventory item that set it, and reverse-guessing one would make
- *     the card confidently wrong. So a worn slot says "Worn" plus the raw
- *     numbers, never "Leather Jacket".
+ * The distinction matters and is preserved rather than smoothed over:
  *
- *  2. No empty state for Torso / Legs / Feet. A freemode ped always resolves to
- *     some drawable on components 11, 4 and 6 - drawable 0 is a real garment
- *     there, not an absence. Those three are reported permanently worn
- *     (canBeEmpty: false) rather than given a made-up "looks empty" heuristic.
- *     Only Head (prop 0, where -1 genuinely means nothing), Mask (component 1)
- *     and Armour (component 9) have a trustworthy empty signal.
- *
- *  3. Display only. Click-to-unequip is deliberately absent: with no slot ->
- *     item mapping (see 1) there is nothing to unequip.
+ *  - A slot with `unequippable` shows the item's label and is a button. Clicking
+ *    it asks the server to return that item; the server can refuse (no room),
+ *    in which case nothing changes and the player is notified in game.
+ *  - A slot that is `filled` with no item was dressed by character creation, an
+ *    admin command or qbx_radialmenu's separate clothing toggle. There is no
+ *    item to give back, so it stays "Worn" and is not clickable.
+ *  - Torso / Legs / Feet still have no empty state (canBeEmpty: false): a
+ *    freemode ped always resolves to some drawable on components 11, 4 and 6.
+ *    Taking our garment off there restores the drawable the ped had immediately
+ *    before it went on, not a made-up "bare" constant.
  *
  * If the client never sends the event, or illenium-appearance is missing, the
  * card renders an explicit "unknown" state instead of pretending the ped is
@@ -59,6 +58,9 @@ const describe = (slot: AppearanceSlot, label: string) => {
       ? ` (${slot.kind} ${slot.id}, drawable ${slot.drawable}, texture ${slot.texture})`
       : '';
 
+  // A real item behind the slot: name it, and say the click does something.
+  if (slot.unequippable) return `${slot.label ?? slot.item} · Click to take off${variation}`;
+
   // Honest about the three slots that can never report empty.
   const caveat = slot.canBeEmpty ? '' : ' — this slot has no "nothing worn" state';
 
@@ -74,6 +76,15 @@ const AppearanceCard: React.FC<{ characterName: string }> = ({ characterName }) 
   const hasData = slots.length > 0;
   const equipped = slots.filter((slot) => slot.filled).length;
 
+  const unequip = (slot: AppearanceSlot) => {
+    if (!slot.unequippable) return;
+
+    // Fire and forget: the client applies the revert only once the server has
+    // confirmed the item is back in the inventory, and pushes a fresh
+    // setAppearance either way. Nothing is optimistically mutated here.
+    fetchNui('unequipClothing', { key: slot.key });
+  };
+
   return (
     <div className="panel appearance-card">
       <div className="band block-head">
@@ -87,15 +98,31 @@ const AppearanceCard: React.FC<{ characterName: string }> = ({ characterName }) 
         {hasData
           ? slots.map((slot) => {
               const meta = SLOT_META[slot.key];
+              const clickable = !!slot.unequippable;
 
               return (
                 <div
                   key={slot.key}
                   className="acc-slot"
                   data-filled={slot.filled}
+                  data-clickable={clickable}
                   title={describe(slot, meta.label)}
+                  role={clickable ? 'button' : undefined}
+                  tabIndex={clickable ? 0 : undefined}
+                  onClick={clickable ? () => unequip(slot) : undefined}
+                  onKeyDown={
+                    clickable
+                      ? (event) => {
+                          if (event.key === 'Enter' || event.key === ' ') {
+                            event.preventDefault();
+                            unequip(slot);
+                          }
+                        }
+                      : undefined
+                  }
                 >
                   <Icon name={meta.icon} />
+                  {slot.label && <span className="acc-slot-label">{slot.label}</span>}
                 </div>
               );
             })
