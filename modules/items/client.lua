@@ -1,7 +1,8 @@
 if not lib then return end
 
 local Items = require 'modules.items.shared' --[[@as table<string, OxClientItem>]]
-local Appearance = require 'modules.appearance.client'
+local Clothing = require 'modules.clothing.shared'
+local ClothingClient = require 'modules.clothing.client'
 
 local function sendDisplayMetadata(data)
     SendNUIMessage({
@@ -140,57 +141,40 @@ Item('phone', function(data, slot)
 	end
 end)
 
-Item('clothing', function(data, slot)
-	local metadata = slot.metadata
+--[[
+	Clothing is a physical item, not a visual toggle.
 
-	if not metadata.drawable then return print('Clothing is missing drawable in metadata') end
-	if not metadata.texture then return print('Clothing is missing texture in metadata') end
+	Stock behaviour was: flip the native ped variation, forget, and treat a
+	second use as "take it off" by comparing the ped against the metadata. The
+	item never left the inventory, so the player was wearing a jacket that was
+	also still in their bag, and nothing outside this function knew what was on.
 
-	if metadata.prop then
-		if not SetPedPreloadPropData(cache.ped, metadata.prop, metadata.drawable, metadata.texture) then
-			return print('Clothing has invalid prop for this ped')
-		end
-	elseif metadata.component then
-		if not IsPedComponentVariationValid(cache.ped, metadata.component, metadata.drawable, metadata.texture) then
-			return print('Clothing has invalid component for this ped')
-		end
-	else
-		return print('Clothing is missing prop/component id in metadata')
-	end
+	Now this handler does no bookkeeping of its own. It calls the existing
+	`ox_inventory:useItem` validation path first (durability, hooks, the use
+	animation - unchanged), and on approval hands off to
+	modules/clothing/client.lua, which asks the SERVER to remove the item and
+	only applies the ped variation once the server confirms it did. Taking it
+	off is no longer a second use of the item - it is a click on the Appearance
+	card, because once worn the item is not in the inventory to be used.
+]]
+local function useClothing(data, slot)
+	local slotId = slot.slot
 
-	ox_inventory:useItem(data, function(data)
-		if not data then return end
+	ox_inventory:useItem(data, function(result)
+		if not result then return end
 
-		metadata = data.metadata
-
-		if metadata.prop then
-			local prop = GetPedPropIndex(cache.ped, metadata.prop)
-			local texture = GetPedPropTextureIndex(cache.ped, metadata.prop)
-
-			if metadata.drawable == prop and metadata.texture == texture then
-				ClearPedProp(cache.ped, metadata.prop)
-			else
-				-- { prop = 0, drawable = 2, texture = 1 } = grey beanie
-				SetPedPropIndex(cache.ped, metadata.prop, metadata.drawable, metadata.texture, false);
-			end
-		elseif metadata.component then
-			local drawable = GetPedDrawableVariation(cache.ped, metadata.component)
-			local texture = GetPedTextureVariation(cache.ped, metadata.component)
-
-			-- if it matches, the item is already worn and nothing changes
-			-- (setup defaults so we can strip?)
-			if metadata.drawable ~= drawable or metadata.texture ~= texture then
-				-- { component = 4, drawable = 4, texture = 1 } = jeans w/ belt
-				SetPedComponentVariation(cache.ped, metadata.component, metadata.drawable, metadata.texture, 0);
-			end
-		end
-
-		-- Native ped state has (possibly) just changed - re-read it and push the
-		-- fresh worn/not-worn state to the Appearance card. The early `return`s
-		-- above were flattened into if/else purely so this always runs.
-		Appearance.refresh()
+		ClothingClient.equip(slotId)
 	end)
-end)
+end
+
+-- The generic stock item, whose drawable/texture/component come from metadata...
+Item('clothing', useClothing)
+
+-- ...and the named starter catalog, whose values come from
+-- modules/clothing/shared.lua so they survive a plain `/giveitem`.
+for name in pairs(Clothing.catalog) do
+	Item(name, useClothing)
+end
 
 -----------------------------------------------------------------------------------------------
 

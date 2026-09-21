@@ -50,6 +50,24 @@ function server.buyLicense()
 	warn('Licenses are not supported for the current framework.')
 end
 
+---Equipped clothing (modules/clothing/server.lua) is stored as player metadata
+---so it piggybacks on the framework's existing player save - no new table.
+---Frameworks without a metadata store fall back to an in-memory record, which
+---works for the session and is lost on relog.
+---@diagnostic disable-next-line: duplicate-set-field
+function server.getClothingMetadata() end
+
+local warnedClothingMetadata = false
+
+---@diagnostic disable-next-line: duplicate-set-field
+function server.setClothingMetadata()
+	if warnedClothingMetadata then return end
+
+	warnedClothingMetadata = true
+
+	warn('Equipped clothing cannot be saved for the current framework - it will be lost on relog.')
+end
+
 local Inventory = require 'modules.inventory.server'
 
 function server.playerDropped(source)

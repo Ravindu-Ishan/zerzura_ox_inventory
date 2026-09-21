@@ -209,6 +209,82 @@ return {
 		consume = 0,
 	},
 
+	--[[
+		Starter clothing catalog - MALE ONLY (mp_m_freemode_01), admin-give /
+		testing only. There is no shop or vendor for these yet; that is separate
+		future work, as is a wardrobe.
+
+		`consume = 0` so using one never destroys it: wearing it is a move, not a
+		use. modules/clothing/server.lua takes the item out of the inventory when
+		it goes on and puts the same item back when it comes off, so an item is
+		either in the bag or on the ped, never both.
+
+		`stack = false` because each garment is its own physical object - two
+		identical beanies must not merge into a stack of 2, or unequipping one
+		would be ambiguous about which instance came back.
+
+		`close = false` so the inventory stays open on use: the Appearance card
+		updates in place, and taking the garment back off is a click on that card.
+
+		The drawable/texture values, the female gap and the provenance of every
+		number live in modules/clothing/shared.lua (Clothing.catalog). Do not
+		duplicate them here - this file only says what the item IS.
+	]]
+
+	['clothing_beanie'] = {
+		label = 'Grey Beanie',
+		weight = 100,
+		stack = false,
+		consume = 0,
+		close = false,
+		description = 'A plain grey beanie. Head.',
+	},
+
+	['clothing_balaclava'] = {
+		label = 'Balaclava',
+		weight = 90,
+		stack = false,
+		consume = 0,
+		close = false,
+		description = 'Covers everything but the eyes. Mask.',
+	},
+
+	['clothing_bomber'] = {
+		label = 'Bomber Jacket',
+		weight = 1200,
+		stack = false,
+		consume = 0,
+		close = false,
+		description = 'A worn bomber jacket. Torso.',
+	},
+
+	['clothing_vest'] = {
+		label = 'Tactical Vest',
+		weight = 3500,
+		stack = false,
+		consume = 0,
+		close = false,
+		description = 'Heavy plated vest. Cosmetic only - it does not add armour.',
+	},
+
+	['clothing_jeans'] = {
+		label = 'Belted Jeans',
+		weight = 700,
+		stack = false,
+		consume = 0,
+		close = false,
+		description = 'Blue jeans with a belt. Legs.',
+	},
+
+	['clothing_boots'] = {
+		label = 'Patrol Boots',
+		weight = 900,
+		stack = false,
+		consume = 0,
+		close = false,
+		description = 'Black leather boots. Feet.',
+	},
+
 	['mastercard'] = {
 		label = 'Fleeca Card',
 		stack = false,

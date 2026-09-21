@@ -6,6 +6,7 @@ require 'modules.interface.client'
 local Utils = require 'modules.utils.client'
 local Weapon = require 'modules.weapon.client'
 local Appearance = require 'modules.appearance.client'
+local Clothing = require 'modules.clothing.client'
 local currentWeapon
 
 exports('getCurrentWeapon', function()
@@ -1359,6 +1360,12 @@ RegisterNetEvent('ox_inventory:setPlayerInventory', function(currentDrops, inven
 	})
 
 	PlayerData.loaded = true
+
+	-- Re-apply whatever the server says this character is wearing. Threaded
+	-- because it has to wait for illenium-appearance to finish restoring the
+	-- base appearance first, or it would be overwritten - see
+	-- modules/clothing/client.lua for how that wait is done.
+	CreateThread(Clothing.restore)
 
 	if not client.disablesetupnotification then
 		lib.notify({ description = locale('inventory_setup') })

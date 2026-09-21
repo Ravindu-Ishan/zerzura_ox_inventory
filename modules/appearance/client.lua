@@ -1,55 +1,42 @@
 if not lib then return end
 
 --[[
-	Feeds the NUI "Appearance" card with what the ped is ACTUALLY wearing.
+	Feeds the NUI "Appearance" card with what the ped is ACTUALLY wearing, and -
+	where we put it there ourselves - which inventory item put it there.
 
-	Why ped state and not item tracking:
-	`Item('clothing', ...)` in modules/items/client.lua flips native ped
-	variations and forgets. Remembering "which item was last used" there would
-	report a naked ped for anyone dressed by character creation, an admin
-	command or any other script - i.e. almost everyone. So we read ground truth
-	off the ped instead, via illenium-appearance's getPedAppearance export
-	(game/util.lua -> getPedComponents/getPedProps), which is just
-	GetPedDrawableVariation/GetPedTextureVariation/GetPedPropIndex over
-	constants.PED_COMPONENTS_IDS = {0..11} and PED_PROPS_IDS = {0,1,2,6,7}.
+	Two sources, deliberately:
 
-	The trade-off, stated plainly: we learn numbers, not items. A drawable of
-	`12` on component 11 cannot be mapped back to "Leather Jacket" - nothing on
-	the client holds that mapping, and guessing one would make the card lie. So
-	the card shows worn/not-worn per slot and the raw numbers in the tooltip,
-	and never an item label. See AppearanceCard.tsx for the UI half of this.
+	1. Ground truth about the ped, via illenium-appearance's getPedAppearance
+	   export (game/util.lua -> getPedComponents/getPedProps, i.e.
+	   GetPedDrawableVariation/GetPedTextureVariation/GetPedPropIndex over
+	   constants.PED_COMPONENTS_IDS = {0..11} and PED_PROPS_IDS = {0,1,2,6,7}).
+	   This is what makes the worn/not-worn state honest for anyone dressed by
+	   character creation, an admin command, qbx_radialmenu's clothing toggle or
+	   any other script.
+
+	2. The equipped-item read-model from modules/clothing/client.lua, which
+	   mirrors the server's records. This is what supplies a real item label, and
+	   marks the tile as unequippable.
+
+	The two can disagree, and the payload says so rather than papering over it: a
+	slot is `filled` if the PED says something is worn, and only carries
+	`item`/`label`/`unequippable` if we also hold a server-side record whose
+	drawable/texture still match the ped. If another script has since changed
+	that component the record is stale, so the card falls back to "Worn" instead
+	of naming a garment the player is demonstrably not wearing.
 ]]
+
+local Clothing = require 'modules.clothing.shared'
+local ClothingClient = require 'modules.clothing.client'
 
 local Appearance = {}
 
 local APPEARANCE_RESOURCE = 'illenium-appearance'
 
----Per-slot definition for the six tiles on the Appearance card.
----
----`canBeEmpty` is the honest part. Only three of these six slots have a
----trustworthy "nothing is worn" signal:
----
----  * head   - PROP 0. GetPedPropIndex returns -1 with no hat/helmet. This is a
----             real, engine-level absence, not a convention.
----  * mask   - COMPONENT 1. Freemode convention is drawable 0 = bare face.
----  * armour - COMPONENT 9. Freemode convention is drawable 0 = no vest overlay.
----             (This is the visual overlay only - it is NOT the numeric armour
----             stat from GetPedArmour, which `Item('armour', ...)` sets.)
----
----The other three genuinely have no "empty" in the game. A freemode ped always
----resolves to *some* torso, legs and feet drawable - drawable 0 there is a
----valid garment (and on some models an underwear/bare-arms variant), not an
----absence. Rather than invent a heuristic that would call a real outfit
----"empty", these are reported as permanently worn and flagged canBeEmpty=false
----so the UI can be honest about it.
-local SLOTS = {
-	{ key = 'head',   kind = 'prop',      id = 0,  canBeEmpty = true,  emptyValue = -1 },
-	{ key = 'mask',   kind = 'component', id = 1,  canBeEmpty = true,  emptyValue = 0 },
-	{ key = 'torso',  kind = 'component', id = 11, canBeEmpty = false },
-	{ key = 'armour', kind = 'component', id = 9,  canBeEmpty = true,  emptyValue = 0 },
-	{ key = 'legs',   kind = 'component', id = 4,  canBeEmpty = false },
-	{ key = 'feet',   kind = 'component', id = 6,  canBeEmpty = false },
-}
+---The canonical six-slot mapping now lives in modules/clothing/shared.lua, so
+---the client, the server and this card cannot drift apart. See that file for
+---why only head/mask/armour have a trustworthy "nothing worn" signal.
+local SLOTS = Clothing.slots
 
 local warned = false
 
@@ -117,6 +104,7 @@ function Appearance.refresh()
 
 	local components = indexById(appearance.components, 'component_id')
 	local props = indexById(appearance.props, 'prop_id')
+	local equipped = ClothingClient.getEquipped()
 	local slots = table.create(#SLOTS, 0)
 
 	for i = 1, #SLOTS do
@@ -134,9 +122,19 @@ function Appearance.refresh()
 		elseif slot.canBeEmpty then
 			filled = drawable ~= slot.emptyValue
 		else
-			-- No reliable "nothing worn" value exists for this slot - see SLOTS.
+			-- No reliable "nothing worn" value exists for this slot - see
+			-- modules/clothing/shared.lua.
 			filled = true
 		end
+
+		local record = equipped[slot.key]
+
+		-- Only name the item if the ped still agrees with the record. A stale
+		-- record (another script changed the component behind our back) shows
+		-- as a plain worn slot rather than a confident lie.
+		local matches = record ~= nil
+			and drawable == record.drawable
+			and texture == record.texture
 
 		slots[i] = {
 			key = slot.key,
@@ -146,6 +144,10 @@ function Appearance.refresh()
 			texture = texture,
 			filled = filled,
 			canBeEmpty = slot.canBeEmpty,
+			item = matches and record.item or nil,
+			label = matches and record.label or nil,
+			-- Clickable only when there is a real item to give back.
+			unequippable = matches or nil,
 		}
 	end
 

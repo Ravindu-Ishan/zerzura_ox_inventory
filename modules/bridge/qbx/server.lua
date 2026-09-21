@@ -94,6 +94,28 @@ function server.buyLicense(inv, license)
     return true, 'have_purchased'
 end
 
+---Equipped clothing lives in qbx_core player metadata, exactly like licences
+---above: written through SetMetaData so it rides the framework's own player
+---save. No new table, no new query.
+---@param inv OxInventory
+---@return table<string, table>?
+---@diagnostic disable-next-line: duplicate-set-field
+function server.getClothingMetadata(inv)
+    local player = QBX:GetPlayer(inv.id)
+    return player and player.PlayerData.metadata.equippedClothing
+end
+
+---@param inv OxInventory
+---@param value table<string, table>
+---@diagnostic disable-next-line: duplicate-set-field
+function server.setClothingMetadata(inv, value)
+    local player = QBX:GetPlayer(inv.id)
+    if not player then return end
+
+    player.PlayerData.metadata.equippedClothing = value
+    player.Functions.SetMetaData('equippedClothing', value)
+end
+
 ---@diagnostic disable-next-line: duplicate-set-field
 function server.isPlayerBoss(playerId, group, grade)
     return QBX:IsGradeBoss(group, grade)

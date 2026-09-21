@@ -1,6 +1,9 @@
 if not lib then return end
 
 require 'modules.bridge.server'
+-- After the bridge: it supplies the framework hooks used to persist equipped
+-- clothing across a relog (server.get/setClothingMetadata).
+require 'modules.clothing.server'
 require 'modules.crafting.server'
 require 'modules.shops.server'
 require 'modules.pefcl.server'
