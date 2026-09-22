@@ -76,36 +76,144 @@ local function isVariationValid(variation)
 end
 
 --[[
-	Components that decide what a BARE component 11 actually looks like, logged
-	alongside a torso revert and read-only here.
+	The components that decide what a BARE component 11 actually looks like.
 
 	Component 11 (tops) is not the whole upper body: 3 is the torso/arms mesh and
-	8 is the undershirt. illenium-appearance's own strip-the-ped routine writes
-	all three together (constants.DATA_CLOTHES, copied verbatim into
-	z-player-charcreation's UNDRESS_DRAWABLES: male 3 = 15, 8 = 15, 11 = 252), so
-	a "bare torso" that only writes 11 leaves whatever 3 and 8 happened to be.
-	We do NOT own those two slots - there is no equipped record and no `revert`
-	reading for them, so writing them here would be a change we cannot undo - but
-	their values are the difference between "the shirt came off correctly and you
-	are seeing the undershirt" and "the ped is broken", which is exactly what the
-	owner's report is ambiguous about. So they are printed, not touched.
+	8 is the undershirt. Drawable 252 on component 11 is not a standalone "bare
+	chest" - it is one third of a set, and it is only meant to be worn with the
+	other two. Verified at the original source, not recalled:
+	illenium-appearance's strip-the-ped routine removeClothes
+	(game/customization.lua:509-523) writes every pair in
+	constants.DATA_CLOTHES.body.components.male (game/constants.lua:289-296) in
+	one go - {11, 252}, {3, 15}, {8, 15} - and z-player-charcreation's
+	UNDRESS_DRAWABLES (main server repo, client/main.lua) carries the same three
+	numbers for male.
+
+	This block used to log those two components and deliberately not write them,
+	because it was still a hypothesis. The owner's F8 capture settled it:
+
+	    [clothing] unequip torso: bare -> component 11 drawable 252 texture 0 | valid=true | ...
+	    [clothing] unequip torso: component 11 is now 252/0
+	    [clothing] unequip torso: neighbour component 3 is drawable 0 texture 0 (of 214 variations)
+	    [clothing] unequip torso: neighbour component 8 is drawable 0 texture 0 (of 213 variations)
+
+	valid=true and the read-back both say the component 11 write landed exactly
+	as asked, which rules out the DLC-unavailable theory on that client - and the
+	character still looked wrong (a generic tank-top-and-shorts look), because 3
+	and 8 were sitting at 0/0 instead of 15/15. 252 against an unrelated 0/0 is
+	that broken-looking outfit; it is not a bare chest.
+
+	So the bare fallback now writes all three. ONLY the bare fallback does - see
+	applyBareTorsoSet for the paths that are deliberately left alone.
+
+	DATA_CLOTHES's male body set also lists {10, 0} and {5, 0}. Those are decals
+	and the bag/parachute slot - neither is upper-body mesh, and clearing a bag
+	off a player who is carrying one is not this fix's business. Left alone.
+
+	MALE ONLY, like every other number in this feature. DATA_CLOTHES does carry a
+	female set ({11, 15}, {3, 15}, {8, 14}), but `bare` for torso in shared.lua is
+	the male 252 to begin with, so a female ped has no coherent torso value to
+	pair anything with. Female stays one follow-up rather than a half-done one.
 ]]
-local TORSO_NEIGHBOURS = { 3, 8 }
+local TORSO_BARE_SET = {
+	{ id = 3, drawable = 15 },
+	{ id = 8, drawable = 15 },
+}
 
 ---Log the components around a torso revert, so the F8 console can tell a
 ---correct bare-chest result apart from a broken ped.
+---
+---Still printed on every torso revert, including the ones where nothing below
+---is written (a stored `revert`, or a revert where every candidate was
+---rejected) - those are exactly the cases where "what are 3 and 8 right now" is
+---not something this file decided, and so the only way to know is to read them.
 ---@param id number the component that was just reverted
 local function logNeighbours(id)
 	if id ~= 11 then return end
 
-	for i = 1, #TORSO_NEIGHBOURS do
-		local neighbour = TORSO_NEIGHBOURS[i]
+	for i = 1, #TORSO_BARE_SET do
+		local neighbour = TORSO_BARE_SET[i].id
 
 		print(('[clothing] unequip torso: neighbour component %d is drawable %d texture %d (of %d variations)'):format(
 			neighbour,
 			GetPedDrawableVariation(cache.ped, neighbour),
 			GetPedTextureVariation(cache.ped, neighbour),
 			GetNumberOfPedDrawableVariations(cache.ped, neighbour)))
+	end
+end
+
+---Write the two components that pair with a bare component 11.
+---
+---Reached on ONE path: a torso revert that actually applied `bare` to component
+---11. Traced against the three cases that must not be touched:
+---
+---  * Module.equip never reaches here. It applies a real item's own
+---    drawable/texture to component 11 and does not call revertSlot at all.
+---    Nothing anywhere documents what a real jacket expects components 3 and 8
+---    to be, and only the BARE value is documented as needing this pairing, so
+---    a real garment gets nothing from this function.
+---  * A revert that used the stored `revert` reading leaves the loop below with
+---    `candidate.source == 'revert'`, which is not 'bare'. That reading is what
+---    the ped genuinely looked like just before the garment went on - very
+---    possibly whatever character creation set, not this 252/15/15 set at all -
+---    so there is no problem there for this to fix, and overwriting 3 and 8
+---    would be inventing one.
+---  * A revert where every candidate was rejected writes nothing at all,
+---    component 11 included. 15/15 without the 252 it pairs with would be a
+---    change with no point to it.
+---
+---The gate is what was APPLIED, not what was stored. A stored `revert` that
+---fails validation falls through to `bare`, and at that point the ped really is
+---showing 252 and really does need its pair, whatever the record happens to
+---hold.
+---
+---Validated and read back exactly like the component 11 write - these are
+---drawables on the same ped from the same table, and are no more guaranteed to
+---exist than 252 is. Palette 0 matches the rest of this file (illenium passes 2
+---in removeClothes; the palette selects a texture palette and is not what this
+---bug was about).
+---
+---Deliberately NOT mirrored into illenium-appearance's stored row. persistSlot
+---patches the one component the equipped record owns, which is 11. Components 3
+---and 8 in that row are the character's own creation-time values, and after the
+---player puts a jacket back on this file has nothing to say about what they
+---should be - so writing 15/15 there would make a temporary bare state
+---permanent in the database. The consequence is that this fix is a live-ped fix
+---for the session: on relog illenium restores the character's own 3/8 again.
+---@param key string slot key, for the log lines
+local function applyBareTorsoSet(key)
+	for i = 1, #TORSO_BARE_SET do
+		local part = TORSO_BARE_SET[i]
+		local worn = GetPedDrawableVariation(cache.ped, part.id)
+		local wornTexture = GetPedTextureVariation(cache.ped, part.id)
+		local variations = GetNumberOfPedDrawableVariations(cache.ped, part.id)
+
+		local valid = isVariationValid({
+			kind = 'component',
+			id = part.id,
+			drawable = part.drawable,
+			texture = 0,
+		})
+
+		print(('[clothing] unequip %s: bare set -> component %d drawable %d texture 0 | valid=%s | currently %d/%d | %d variations exist')
+			:format(key, part.id, part.drawable, tostring(valid), worn, wornTexture, variations))
+
+		if valid then
+			SetPedComponentVariation(cache.ped, part.id, part.drawable, 0, 0)
+
+			local got = GetPedDrawableVariation(cache.ped, part.id)
+			local gotTexture = GetPedTextureVariation(cache.ped, part.id)
+
+			if got ~= part.drawable or gotTexture ~= 0 then
+				warn(('unequip %s: asked component %d for drawable %d texture 0 but the ped reports %d/%d - the value did not take')
+					:format(key, part.id, part.drawable, got, gotTexture))
+			else
+				print(('[clothing] unequip %s: component %d is now %d/%d'):format(key, part.id, got, gotTexture))
+			end
+		else
+			warn(('unequip %s: bare set drawable %d texture 0 is not valid on this ped (component %d has %d variations), so it was not applied - component 11 is bare without the pair it expects')
+				:format(key, part.drawable, part.id, variations))
+		end
 	end
 end
 
@@ -129,22 +237,28 @@ end
 ---isVariationValid before asking the server for anything, precisely so a value
 ---this ped cannot wear fails with the item still in the bag instead of being
 ---painted on. The revert path had no equivalent and applied `revert` / `bare` /
----`emptyValue` straight to SetPedComponentVariation, which is a real hole rather
----than a theoretical one: `bare` for torso is drawable 252, and that drawable
----only exists while the DLC that ships it is streaming. z-player-charcreation
----(main server repo) hit exactly this and documents it on its own
----UNDRESS_DRAWABLES table - "male torso2 252 in particular only exists if the
----DLC that ships it is streaming" - having traced a "character has no body" bug
----to it. So each fallback is validated, they are tried in order of how much we
+---`emptyValue` straight to SetPedComponentVariation. The reason to close that
+---was `bare` for torso being drawable 252, which z-player-charcreation's own
+---UNDRESS_DRAWABLES table says "only exists if the DLC that ships it is
+---streaming", having traced a "character has no body" bug to it.
+---
+---THAT IS NOT WHAT THIS SERVER'S TORSO BUG TURNED OUT TO BE. The owner's F8
+---capture shows 252 validating and reading back cleanly on their client - see
+---the TORSO_BARE_SET block above for the log and for what was actually wrong.
+---The validation stays anyway: it costs one native call, the DLC caveat is still
+---true of some other client, and the same check now guards the two companion
+---writes. So each fallback is validated, they are tried in order of how much we
 ---trust them, and if none of them is valid the ped is LEFT ALONE: still wearing
 ---a garment that is now back in the bag is a cosmetic lie that the next
 ---equip/relog corrects, whereas a rejected drawable is the broken ped itself.
 ---
 ---The prints are deliberate and are meant to stay. This whole path is
 ---in-game-only (there is no ped in a browser and no IsPedComponentVariationValid
----outside the client), it has already produced one report that reads as two
----different bugs, and the same read-back-and-print pattern is what finally
----pinned down the undress bug in z-player-charcreation.
+---outside the client), it has already produced one report that read as two
+---different bugs, and it is what turned the second of those from a guess into a
+---known cause. The same read-back-and-print pattern is what pinned down the
+---undress bug in z-player-charcreation. Whether 15/15 is what the ped should
+---look like is the next thing these lines are there to answer.
 ---@param data table instruction returned by the unequip callback
 local function revertSlot(data)
 	if data.kind == 'prop' then
@@ -222,6 +336,14 @@ local function revertSlot(data)
 						:format(data.key, data.id, drawable, texture, got, gotTexture))
 				else
 					print(('[clothing] unequip %s: component %d is now %d/%d'):format(data.key, data.id, got, gotTexture))
+				end
+
+				-- A bare component 11 is only a third of the change. Gated on
+				-- the candidate that was actually APPLIED, so a stored `revert`
+				-- reading, every other slot and every all-candidates-rejected
+				-- revert fall straight past it - see applyBareTorsoSet.
+				if candidate.source == 'bare' and data.id == 11 then
+					applyBareTorsoSet(data.key)
 				end
 
 				return logNeighbours(data.id)

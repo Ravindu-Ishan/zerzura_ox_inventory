@@ -44,9 +44,8 @@ local Clothing = {}
 ---Extras.Pants male = 61 (bare legs), drawables.Shoes male = 34 (barefoot).
 ---They are MALE values - see the female note on CATALOG below.
 ---
----NOT ONE OF THEM IS GUARANTEED TO EXIST ON A GIVEN CLIENT, and torso 252 in
----particular is known not to. The same number appears in
----z-player-charcreation's UNDRESS_DRAWABLES (main server repo,
+---NOT ONE OF THEM IS GUARANTEED TO EXIST ON A GIVEN CLIENT. The same numbers
+---appear in z-player-charcreation's UNDRESS_DRAWABLES (main server repo,
 ---client/main.lua), sourced from illenium-appearance's own
 ---constants.DATA_CLOTHES, and that table carries a comment written after the
 ---resource was debugged in game: "male torso2 252 in particular only exists if
@@ -64,6 +63,17 @@ local Clothing = {}
 ---"fix" a torso problem by swapping this number for a different guess; the
 ---validation and the F8 logging in revertSlot are there to say what the ped
 ---actually accepted.
+---
+---AND THEY HAVE SAID SO, for torso, on this server's own client: 252 validated
+---and read back cleanly there, so the DLC caveat above - while still true of
+---some other client - was NOT the cause of the torso-revert bug here. 252 is
+---not a whole bare torso on its own; it is one of a set of three that
+---DATA_CLOTHES writes together (11 = 252 with 3 = 15 and 8 = 15 for male), and
+---writing it against whatever 3 and 8 happened to be is what produced the
+---wrong-looking character. That pairing lives in client.lua's TORSO_BARE_SET
+---rather than here, because it is a property of this one fallback value and not
+---of the slot: only the bare torso needs it, and only when it is the value
+---actually applied.
 Clothing.slots = {
 	{ key = 'head',   kind = 'prop',      id = 0,  canBeEmpty = true,  emptyValue = -1 },
 	{ key = 'mask',   kind = 'component', id = 1,  canBeEmpty = true,  emptyValue = 0 },
